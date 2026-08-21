@@ -54,7 +54,9 @@ const LOOK = {
   ],
 };
 
-const DISTANCES = ["<5km", "<20km", "<50km", "<100km", "Custom"];
+/* The file's four, and only those: they come to exactly the width of the
+   column with the rules and the gaps taken out, which is why there are four. */
+const DISTANCES = ["<5km", "<20km", "<50km", "Custom"];
 
 const canvas = document.getElementById("stage");
 const cards = document.querySelector(".cards");
@@ -70,6 +72,7 @@ const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
   alpha: true,
+  powerPreference: "high-performance",
 });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.NeutralToneMapping;
@@ -108,6 +111,13 @@ function pitch() {
 }
 
 function resize() {
+  cutCells();
+  for (const name of Object.keys(rails)) {
+    rails[name].fit();
+    /* A rail whose cells have just changed width is a rail that is no longer
+       looking at what it was looking at. */
+    railTo(name, rails[name].showing(), "instant");
+  }
   const width = cards.clientWidth;
   const height = cards.clientHeight;
   if (!width || !height) return;
@@ -127,8 +137,9 @@ if (chosen < 0) chosen = 0;
  * What is on a day.
  *
  * Made from the date rather than kept anywhere, so a day looks the same every
- * time it is scrolled back to. Six designs in the sheet and three to six shifts
- * on a day, which is a rota and not a catalogue.
+ * time it is scrolled back to. Five to nine of them, which is what the design
+ * has on screen at once: fewer than that and the wheel is a card in an empty
+ * frame rather than a list you are somewhere in.
  */
 function shiftsOn(date) {
   let seed =
@@ -138,7 +149,7 @@ function shiftsOn(date) {
     return seed / 4294967296;
   };
   next();
-  const many = 3 + Math.floor(next() * 4);
+  const many = 5 + Math.floor(next() * 5);
   return Array.from({ length: many }, () => Math.floor(next() * CARD_COUNT));
 }
 
@@ -191,6 +202,31 @@ function pushSurface() {
 
 const rails = {};
 
+/*
+ * How wide a cell is in each rail, from the column the screen actually leaves.
+ *
+ * The file gives every cell in these rows flex-1 — an equal share of what is
+ * left once the rules and the gaps are taken out — so that is what this works
+ * out rather than the pixel widths those shares happen to come to at the 402
+ * the file is drawn at. On a 393 phone the column is 321, and cells cut for 330
+ * overflow it: which is how a distance row that comes to exactly one column
+ * ended up scrolling, 41 points out of place, with its last chip over the edge.
+ */
+function cutCells() {
+  const column = document.querySelector(".calendar").clientWidth;
+  if (!column) return;
+  const share = (rules, gaps, cells) => (column - rules * 2 - gaps * 6) / cells;
+  document
+    .getElementById("months")
+    .style.setProperty("--cell", `${share(4, 6, 3)}px`);
+  document
+    .getElementById("days")
+    .style.setProperty("--cell", `${share(0, 6, 7)}px`);
+  document
+    .getElementById("distance")
+    .style.setProperty("--cell", `${share(5, 8, 4)}px`);
+}
+
 /**
  * One row of the design, on a scroller.
  *
@@ -202,6 +238,24 @@ const rails = {};
 function mountRail(name, cells, onSettle) {
   const rail = document.getElementById(name);
   rail.replaceChildren(...cells);
+
+  /*
+   * A row that already fits does not get the air.
+   *
+   * The half-cell either side is what lets the first and the last of a long
+   * list reach the middle. On a row whose cells come to exactly the width of
+   * the column — the four distances do, which is why there are four — it does
+   * the opposite: it makes a row that fits into a row that scrolls, and shunts
+   * it 41 points off the column it is supposed to sit flush in.
+   */
+  const fit = () => {
+    rail.style.paddingInline = "0px";
+    const fits = rail.scrollWidth <= rail.clientWidth + 1;
+    rail.dataset.fits = String(fits);
+    if (!fits) rail.style.paddingInline = "";
+  };
+  fit();
+  window.addEventListener("resize", fit);
   const chosenOf = () => {
     const box = rail.getBoundingClientRect();
     const middle = box.left + box.width / 2;
@@ -230,7 +284,32 @@ function mountRail(name, cells, onSettle) {
   };
 
   rail.addEventListener("scroll", settle, { passive: true });
-  const found = { rail, settle, chosenOf, showing: () => showing };
+
+  /*
+   * And a cell can be pressed.
+   *
+   * Scrolling to a day three weeks out is a gesture; picking the one next to
+   * the one you are on is a tap, and a calendar that only answers to the first
+   * is a calendar with a hand always on it. A row that scrolls is scrolled to
+   * the cell, so it arrives the same way it would have by hand; a row that fits
+   * has nowhere to scroll, so it is simply chosen.
+   */
+  rail.addEventListener("click", (event) => {
+    const cell = event.target.closest(".cell");
+    if (!cell) return;
+    const index = Number(cell.dataset.index);
+    if (rail.dataset.fits === "true") {
+      showing = index;
+      for (const one of rail.querySelectorAll(".cell"))
+        one.dataset.on = String(Number(one.dataset.index) === index);
+      tick();
+      onSettle(index);
+      return;
+    }
+    railTo(name, index);
+  });
+
+  const found = { rail, settle, chosenOf, showing: () => showing, fit };
   rails[name] = found;
   return found;
 }
@@ -244,12 +323,23 @@ function railTo(name, index, behavior = "smooth") {
   rail.scrollTo({ left, behavior });
 }
 
+/*
+ * A label goes in a span, and it matters.
+ *
+ * Every text node in the design is cap-trimmed, and a trim applies to a text
+ * box — a bare string inside a flex cell is an anonymous box and does not get
+ * one. Left as text the rows came out 38.4 instead of 32, which walked the
+ * whole column 13 points down the screen and took 20 off the cards. The day
+ * cells were right all along, because their three parts were already in spans.
+ */
 const cell = (index, text, className = "cell") => {
   const node = document.createElement("button");
   node.type = "button";
   node.className = className;
   node.dataset.index = String(index);
-  node.textContent = text;
+  const label = document.createElement("span");
+  label.textContent = text;
+  node.append(label);
   return node;
 };
 
@@ -260,6 +350,7 @@ const rule = () => {
 };
 
 function mountCalendar() {
+  cutCells();
   /* Months: three across in the file, with a rule either side of each. */
   const months = [];
   calendar.months.forEach((month, i) => {
@@ -311,27 +402,41 @@ function mountCalendar() {
 
 let at = 0;
 
-reel.addEventListener(
-  "scroll",
-  () => {
-    const step = pitch();
-    if (step <= 0) return;
-    at = reel.scrollTop / step;
-    const passing = Math.round(at);
-    if (passing !== reel.dataset.on * 1) {
-      reel.dataset.on = String(passing);
-      tick();
-    }
-    mark();
-  },
-  { passive: true },
-);
+/*
+ * Nothing listens for the scroll.
+ *
+ * A scroll event on a phone arrives when the browser gets round to it, and
+ * during momentum it is coalesced — so a picture drawn from those events lags
+ * the finger and then catches up, which is exactly what choppy is. The
+ * scroller's position is read once a frame instead, in the same breath as the
+ * drawing, so the cards are wherever the scroller is at the moment the frame is
+ * made. The scrolling itself is still entirely the phone's.
+ */
+let passing = 0;
 
 /* --------------------------------------------------------------- the loop --- */
 
 function draw() {
   requestAnimationFrame(draw);
-  if (!wheel || !needs) return;
+  if (!wheel) return;
+
+  const step = pitch();
+  if (step > 0) {
+    const now = reel.scrollTop / step;
+    if (Math.abs(now - at) > 1e-4) {
+      at = now;
+      needs = true;
+    }
+    /* The detent, felt as it is passed rather than when it settles: that is
+       what makes a list of cards a dial and not a page. */
+    const stop = Math.round(at);
+    if (stop !== passing) {
+      passing = stop;
+      tick();
+    }
+  }
+
+  if (!needs) return;
   needs = false;
   wheel.update({
     radius: LOOK.radius,

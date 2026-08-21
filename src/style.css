@@ -111,7 +111,6 @@ body.starting .screen {
   align-items: center;
   gap: 6.25px;
   width: 100%;
-  max-width: var(--column);
   flex: none;
 }
 
@@ -160,7 +159,6 @@ body.starting .screen {
   flex-direction: column;
   gap: 12px;
   width: 100%;
-  max-width: var(--column);
   flex: none;
 }
 
@@ -185,7 +183,9 @@ body.starting .screen {
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  /* Enough either side that the first and the last cell can reach the middle. */
+  /* Enough either side that the first and the last cell can reach the middle —
+     taken off again by the script for a row that already fits, where it would
+     only shunt a flush row out of the column. */
   padding-inline: calc(50% - var(--cell) / 2);
   touch-action: pan-x;
 }
@@ -288,7 +288,6 @@ body.starting .screen {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  max-width: var(--column);
   overflow: clip;
 }
 
@@ -336,7 +335,6 @@ body.starting .screen {
   align-items: stretch;
   gap: 12px;
   width: 100%;
-  max-width: var(--column);
   flex: none;
 }
 

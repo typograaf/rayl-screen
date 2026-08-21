@@ -3,11 +3,22 @@
 The screen from node 800:5314, running on a phone.
 
     npm install
-    npm run dev
+    npm run dev      # in a browser
+    npm run sim      # in the simulator, as the app
+    npm run app      # build, sync, and open Xcode for a real phone
     npm test
 
-Add it to the Home Screen and it opens without Safari around it, which is the
-size it is drawn at: the design is 874 tall and a tab in Safari is about 660.
+It is an app as well as a page, and the reason is haptics: iOS gives a web page
+no way to ask for one. As an app it is `UIImpactFeedbackGenerator` through
+Capacitor — the same tap the system's own pickers make — and every detent rings
+it. In a browser it falls back to the switch trick below and everything else
+works the same.
+
+For a phone, `npm run app` opens the project in Xcode: pick your team under
+Signing & Capabilities, choose the phone, press run. A device needs a signature
+and a signature needs an account, so that part is yours. In a browser, add it to
+the Home Screen and it opens without Safari around it, which is the size it is
+drawn at: the design is 874 tall and a tab in Safari is about 660.
 
 ## What it is made of
 
@@ -23,6 +34,24 @@ carries rather than repeating a run of them, since a day's shifts are a list and
 not a loop; and there is no backdrop in the picture, because the paper behind
 the cards is the screen's own gradient, in CSS, under everything else. A second
 one drawn in the canvas would be the same gradient half a pixel out.
+
+## Smooth, and what was in the way of it
+
+Two things were making it stutter, and neither was the picture.
+
+**Shaders were being compiled mid-flick.** `transparent` is baked into three's
+program as OPAQUE, so a card flipping to see-through as it reached the edge of
+the arc recompiled its own shader — several times a gesture, each one a stall
+long enough to feel. The materials are see-through from the moment they are made
+now and opacity is a uniform, which costs nothing to change. The suite scrolls
+the reel for eighty frames and fails if a single program is built.
+
+**And the picture was being drawn from scroll events.** A scroll event on a
+phone arrives when the browser gets round to it, and during momentum they are
+coalesced — so the cards lagged the finger and then caught up, which is exactly
+what choppy looks like. Nothing listens for the scroll any more: the reel's
+position is read once a frame, in the same breath as the drawing, so the cards
+are wherever the scroller is at the moment the frame is made.
 
 ## Everything scrolls, and none of it is written here
 
@@ -75,6 +104,19 @@ concerned, so they are not sent.
 It is a trick and it is written down as one. If a Safari stops ringing it, the
 scrolling goes on working exactly as it did and the phone goes quiet, which is
 the right way round for something that is decoration on a gesture.
+
+## The column is what the screen leaves
+
+Every cell in the three rails is `flex-1` in the file — an equal share of what is
+left once the rules and the gaps are taken out. 95.333, 42 and 68 are what those
+shares come to at the 402 the file is drawn at, and they are not the design: the
+shares are.
+
+Pinned to those pixel widths, the four distances — which come to exactly one
+column — came to a column and a bit on a 393 phone, so the row scrolled when it
+should have sat still, shunted 41 points out of place with its last chip over
+the edge. The shares are worked out from the column the screen actually leaves
+now, and a row that already fits does not get the half-cell of air either.
 
 ## Off the file, not off a glance
 

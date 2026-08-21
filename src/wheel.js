@@ -53,6 +53,16 @@ function cardMaterial(atlas, tile) {
     clearcoat: 0,
     clearcoatRoughness: 0.4,
     map: atlas,
+    /*
+     * See-through from the start, and it stays that way.
+     *
+     * `transparent` is baked into three's program as OPAQUE, so flipping it as
+     * a card starts to fade means recompiling that card's shader — mid-scroll,
+     * on a phone, several times a flick. Every one of those is a stall you can
+     * feel, and it is the difference between this wheel gliding and stuttering.
+     * Left on, opacity is a uniform and costs nothing to change.
+     */
+    transparent: true,
   });
 
   material.userData.tile = { value: new THREE.Vector4(...tile) };
@@ -362,24 +372,9 @@ export class Wheel {
 
       const over = Math.abs(theta) - (limit - soft);
       const opacity = over <= 0 ? 1 : Math.max(0, 1 - over / soft);
+      /* Nothing else to say: the material has been see-through since it was
+         made, so this is a uniform and not a recompile. */
       card.material.opacity = opacity;
-
-      /*
-       * And the material is told when that changes it from solid to not.
-       *
-       * `transparent` is not a switch three reads at draw time: it is baked
-       * into the program as OPAQUE, which makes the shader write an alpha of
-       * one whatever the opacity says. Flipped without asking for a recompile,
-       * a card that has started to fade goes on being drawn by the program it
-       * was solid under — and it stays solid, at the edge of the arc, where the
-       * whole point of it is to leave. Only on the change, because a recompile
-       * every frame is a recompile every frame.
-       */
-      const veiled = opacity < 0.999;
-      if (card.material.transparent !== veiled) {
-        card.material.transparent = veiled;
-        card.material.needsUpdate = true;
-      }
       /* A card that has faded out casts no shadow either, or the light shows
          something the picture does not. */
       card.castShadow = opacity > 0.02;

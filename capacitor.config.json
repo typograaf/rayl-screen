@@ -1,0 +1,12 @@
+{
+  "appId": "be.aboutcontact.rayl",
+  "appName": "Rayl",
+  "webDir": "docs",
+  "backgroundColor": "#696963",
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": false,
+    "backgroundColor": "#696963",
+    "limitsNavigationsToAppBoundDomains": true
+  }
+}

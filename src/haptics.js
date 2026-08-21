@@ -1,25 +1,44 @@
+import { Capacitor } from "@capacitor/core";
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
+
 /**
- * A tick you can feel, on the one platform that has one and no way to ask for
- * it.
+ * A tick you can feel.
  *
- * Safari has no Vibration API — `navigator.vibrate` is not there on any iPhone,
- * and never has been. The one thing on iOS that plays the system's own haptic
- * from a web page is the switch control Apple added in Safari 17.4: toggling
- * one ticks. So there is a switch on this page that nobody can see, and this
- * flips it.
+ * In the app it is the real thing: `UIImpactFeedbackGenerator`, through
+ * Capacitor, which is the same tap the system's own pickers make. That is the
+ * whole reason this is an app and not only a page.
  *
- * It is a trick and it is written down as one. If a future Safari stops ringing
- * it, the scrolling goes on working exactly as it did and the phone goes quiet,
+ * In a browser there is no such call. Safari has no Vibration API —
+ * `navigator.vibrate` is not on any iPhone and never has been — and the one
+ * thing on iOS that plays a haptic from a page is the switch control Apple
+ * added in Safari 17.4: toggling one ticks. So on the web there is a switch
+ * nobody can see and this flips it. A trick, written down as one: if a Safari
+ * stops ringing it, the scrolling goes on working and the phone goes quiet,
  * which is the right way round for something that is decoration on a gesture.
- * Everywhere else it is already quiet: nothing else here plays haptics from a
- * page either.
  */
 
 /* Two ticks closer together than this are one tick as far as a hand is
    concerned, and asking for them is how a fast flick turns into a buzz. */
 const APART = 40;
 
+function throttled(ring) {
+  let last = 0;
+  return function tick() {
+    const now = performance.now();
+    if (now - last < APART) return;
+    last = now;
+    ring();
+  };
+}
+
 export function mountHaptics() {
+  if (Capacitor.isNativePlatform()) {
+    return throttled(() => {
+      /* Light, because this is a detent going past and not a thing landing. */
+      Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+    });
+  }
+
   const box = document.createElement("input");
   box.type = "checkbox";
   box.setAttribute("switch", "");
@@ -31,8 +50,8 @@ export function mountHaptics() {
   label.setAttribute("for", "haptic");
   label.setAttribute("aria-hidden", "true");
 
-  /* Out of the way rather than display:none — a control that is not laid out
-     is a control that is not activated either. */
+  /* Out of the way rather than display:none — a control that is not laid out is
+     a control that is not activated either. */
   const hidden =
     "position:fixed;top:0;left:-9999px;width:1px;height:1px;opacity:0;" +
     "pointer-events:none;margin:0;padding:0;border:0";
@@ -40,15 +59,11 @@ export function mountHaptics() {
   label.style.cssText = hidden;
   document.body.append(box, label);
 
-  let last = 0;
-  return function tick() {
-    const now = performance.now();
-    if (now - last < APART) return;
-    last = now;
+  return throttled(() => {
     try {
       label.click();
     } catch {
       // a browser that will not have it is a browser that stays quiet
     }
-  };
+  });
 }

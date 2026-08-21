@@ -187,12 +187,23 @@ check(
   `${(tabs.y - cards.y - cards.height).toFixed(1)}`,
 );
 
+/*
+ * The cells are shares of the column, not the pixel widths those shares come to
+ * at the 402 the file is drawn at.
+ *
+ * Every cell in these rows is flex-1 in the file. Pinned to 95.333, 42 and 68,
+ * they overflow the 321 a 393 phone leaves — which is how a distance row that
+ * comes to exactly one column ended up scrolling with its last chip over the
+ * edge. At 330 these come back to the file's own numbers.
+ */
+const column = (await box(".calendar")).width;
+const share = (rules, gaps, cells) => (column - rules * 2 - gaps * 6) / cells;
 check(
-  "the cells are the widths 330 comes out at",
-  near((await box(".months .cell")).width, 95.333) &&
-    near((await box(".days .cell")).width, 42) &&
-    near((await box(".distance .cell")).width, 68),
-  `${(await box(".months .cell")).width.toFixed(2)}, ${(await box(".days .cell")).width.toFixed(2)}, ${(await box(".distance .cell")).width.toFixed(2)}`,
+  "the cells are equal shares of the column",
+  near((await box(".months .cell")).width, share(4, 6, 3)) &&
+    near((await box(".days .cell")).width, share(0, 6, 7)) &&
+    near((await box(".distance .cell")).width, share(5, 8, 4)),
+  `${(await box(".months .cell")).width.toFixed(2)}, ${(await box(".days .cell")).width.toFixed(2)}, ${(await box(".distance .cell")).width.toFixed(2)} of a ${column.toFixed(0)} column`,
 );
 
 check(
@@ -201,6 +212,48 @@ check(
     near((await box(".distance .rule")).width, 2) &&
     near((await box("nav.tabs .rule")).width, 2),
   `${(await box(".months .rule")).width.toFixed(1)} in the months, ${(await box("nav.tabs .rule")).width.toFixed(1)} in the tabs`,
+);
+
+/*
+ * Where the rules land in the column, which is arithmetic and not a look.
+ *
+ * Three months of 95.333 with four rules of 2 and six gaps of 6 comes to 330,
+ * and four distances of 68 with five rules and eight gaps comes to 330 as well.
+ * So both rows sit flush in the column with a rule at each end — and the day
+ * the distance row was centre-padded like a row that scrolls, it sat 41 points
+ * off and the last chip fell out of the column.
+ */
+const ruleRun = (selector) =>
+  page.evaluate((selector) => {
+    const rail = document.querySelector(selector);
+    const box = rail.getBoundingClientRect();
+    return [...rail.querySelectorAll(".rule")]
+      .map((r) => +(r.getBoundingClientRect().x - box.x).toFixed(1))
+      .filter((x) => x >= -2 && x <= box.width + 2);
+  }, selector);
+
+const distanceRules = await ruleRun(".distance");
+check(
+  "the distances sit flush in the column",
+  distanceRules.length === 5 &&
+    near(distanceRules[0], 0, 1) &&
+    near(distanceRules[4], column - 2, 1.5),
+  `${distanceRules.map((x) => x.toFixed(0)).join(", ")} across ${column.toFixed(0)}`,
+);
+
+const monthRules = await ruleRun(".months");
+check(
+  "and so do the months",
+  monthRules.length === 4 &&
+    near(monthRules[0], 0, 1) &&
+    near(monthRules[3], column - 2, 1.5),
+  `${monthRules.map((x) => x.toFixed(0)).join(", ")} across ${column.toFixed(0)}`,
+);
+
+check(
+  "the days carry no rules between them",
+  (await ruleRun(".days")).length === 0,
+  "seven cells and nothing between them, as the file has it",
 );
 
 check(
@@ -328,6 +381,57 @@ check(
   "and the card in the middle is the one it stopped on",
   middle.nearest === middle.stoppedOn,
   `stopped on ${middle.stoppedOn}, nearest the middle is ${middle.nearest}`,
+);
+
+/*
+ * And it does not stop to compile anything while it is being scrolled.
+ *
+ * This is what choppy was. `transparent` is baked into three's program, so a
+ * card flipping to see-through as it reached the arc's edge recompiled its
+ * shader — mid-flick, several times a gesture, each one a stall you can feel.
+ * The materials are see-through from the moment they are made now, and opacity
+ * is a uniform.
+ */
+const flick = await page.evaluate(async () => {
+  const reel = document.getElementById("reel");
+  const step = reel.children[0].getBoundingClientRect().height;
+  let programs = window.rayl.renderer.info.programs.length;
+  let recompiles = 0;
+  const times = [];
+  await new Promise((done) => {
+    let frames = 0;
+    let last = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      times.push(now - last);
+      last = now;
+      reel.scrollTop += step / 8;
+      const count = window.rayl.renderer.info.programs.length;
+      if (count !== programs) {
+        recompiles++;
+        programs = count;
+      }
+      if (++frames < 80) requestAnimationFrame(tick);
+      else done();
+    };
+    requestAnimationFrame(tick);
+  });
+  const sorted = times.slice(5).sort((a, b) => a - b);
+  return {
+    recompiles,
+    median: sorted[Math.floor(sorted.length / 2)],
+    calls: window.rayl.renderer.info.render.calls,
+  };
+});
+check(
+  "nothing is compiled while the cards are scrolled",
+  flick.recompiles === 0,
+  `${flick.recompiles} recompiles over eighty frames`,
+);
+check(
+  "and a frame is inside the budget",
+  flick.median < 20,
+  `${flick.median.toFixed(1)}ms median, ${flick.calls} draw calls`,
 );
 
 /* ----------------------------------------------------------- the haptics --- */
