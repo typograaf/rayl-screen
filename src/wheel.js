@@ -354,6 +354,7 @@ export class Wheel {
     lean = 0,
     slide = 0,
     frame = Infinity,
+    edge = 1,
   }) {
     const R = Math.max(radius, 0.2) * CARD_HEIGHT;
     const step = (CARD_HEIGHT * (1 + spacing)) / R;
@@ -395,34 +396,32 @@ export class Wheel {
       const over = Math.abs(theta) - (limit - soft);
       const turned = over <= 0 ? 1 : Math.max(0, 1 - over / soft);
       /*
-       * And a card fades as it leaves the frame, by however much of it has
-       * left.
+       * And a card fades out before it reaches the edge of the frame, not on
+       * its way through it.
        *
        * The fade above is the drum's: a card fades because it has turned away,
        * which is the whole of it while the drum is at its own radius — the arc
        * is done with a card well before the card reaches an edge, so no edge is
        * ever involved. Open the drum out flat at the ends of a list and that
        * stops being true. Nothing has turned by more than a few degrees, so
-       * nothing fades, and the frame simply stops: a card at the bottom of the
-       * first screen is cut through the middle by a line in mid-air.
+       * nothing fades, and the frame simply stops: a card is cut through by a
+       * line in mid-air.
        *
-       * So a card also fades on its way out of the frame, in proportion to how
-       * much of it is past the edge — nought while it is inside, gone by the
-       * time it is half out, which is before the cut can be seen. It reads the
-       * same as the turning does and it costs nothing at the other radius,
-       * because there a card is long gone before it gets near an edge.
+       * Fading a card by how much of it is already past the edge does not fix
+       * that, it only dims it — a card three-quarters on at half opacity is
+       * still a card with a straight edge sawn through it. So the fade is over
+       * the last margin *inside* the frame instead, and it is spent by the time
+       * the card's own edge arrives at the frame's. Nothing is ever cut,
+       * because there is never anything there to cut.
        *
-       * The card that ends the list is the case this has to get right: at
-       * either end one card sits flush against an edge, wholly inside the
-       * frame, and this leaves it alone — being flush is not being past.
+       * Which is why the ends of a list land a margin in rather than flush: a
+       * card that has landed sits exactly on the line this fade starts at, so
+       * it is whole, and one that carries on past it is gone before it can be
+       * cut. One number does both.
        */
-      const out =
-        (Math.abs(card.position.y) + CARD_HEIGHT / 2 - frame) / CARD_HEIGHT;
-      const leaving = Math.max(0, Math.min((out - 0.05) / 0.5, 1));
-      const opacity = Math.min(
-        turned,
-        1 - leaving * leaving * (3 - 2 * leaving),
-      );
+      const outer = Math.abs(card.position.y) + CARD_HEIGHT / 2;
+      const near = Math.max(0, Math.min((frame - outer) / edge, 1));
+      const opacity = Math.min(turned, near * near * (3 - 2 * near));
       /* Nothing else to say: the material has been see-through since it was
          made, so this is a uniform and not a recompile. */
       card.material.opacity = opacity;
@@ -431,6 +430,11 @@ export class Wheel {
       card.castShadow = opacity > 0.02;
     }
     this.step = step;
+  }
+
+  /** Off, without taking it apart — the cards stay for the next time. */
+  hide() {
+    for (const card of this.cards) card.visible = false;
   }
 
   /** How many steps of scroll there are, end to end. */

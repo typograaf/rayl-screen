@@ -156,89 +156,50 @@ Only under a hand, though. The days push the months along too, and a column
 sliding out because the day it is showing has crossed into another month would
 be the screen answering a question nobody asked.
 
-**Half a month is a whole screen**, and that number is the whole of why it reads
-as a column. Half a month is where the middle passes from one month to the next
-— the moment the day changes and the cards with it — so whatever is on screen
-then is cut to whatever is on screen after. Setting the travel so a column is
-one full screen out at that moment puts the changeover where there is nothing on
-screen to cut. The canvas runs to the edges of the screen for the same reason: a
-column that stopped at the column's own edge was cut off 36 points early, in
-mid-air, on a background that carries on past it.
+**A month is a column along**: a card and a margin, the same 36 that separates
+everything else on this screen. Both columns are drawn — the one going and the
+one coming — because with only one of them on screen a drag showed a column
+leaving and then a screen of nothing until the next was suddenly the one being
+measured. Two of them also makes the changeover free: halfway between two months
+the day changes and the cards with it, and each column is exactly where the
+other is about to be measured to, so they swap and nothing moves. The column
+next door is rebuilt only when it is a different day, which under a hand is
+once.
+
+The canvas runs to the edges of the screen for the same reason: a column that
+stopped at the column's own edge was cut off 36 points early, in mid-air, on a
+background that carries on past it.
 
 ## Nothing is cut by an edge
 
 The drum's own fade is a card turning away. That is the whole story at its own
 radius — the arc is done with a card well before the card reaches an edge — and
 none of it once the drum opens out flat at the ends of a list, where nothing has
-turned by more than a few degrees. So the frame simply stopped: the card at the
-bottom of the first screen was cut through the middle by a line in mid-air, and
-the card the list ends on was cut in half on the way to landing.
+turned by more than a few degrees. So the frame simply stopped: a card was cut
+through the middle by a line in mid-air.
 
-A card fades on its way out of the frame as well, by however much of it is past
-the edge — nothing while it is inside, gone by the time it is half out, which is
-before the cut can be seen. The card that ends the list is the case that has to
-be right: at either end one card sits flush against an edge, wholly inside the
-frame, and being flush is not being past.
+Fading a card by how much of it is already past the edge does not fix that, it
+only dims it — a card three-quarters on at half opacity is still a card with a
+straight edge sawn through it. The fade is over the last **margin inside** the
+frame instead, and it is spent by the time the card's own edge arrives at the
+frame's. Nothing is ever cut because there is never anything there to cut.
+
+Which is why the ends of a list land a margin in rather than flush against the
+edge: a card that has landed sits exactly on the line the fade starts at, so it
+is whole, and one carrying on past it is gone before it can be cut. One number
+does both, and it is the design's own 36.
 
 ## It can be spun
 
-The stops are proximity, not mandatory. Mandatory snapping on iOS ends a flick
-at the next stop however hard it was thrown — one card per swipe, a list that
-cannot be spun. Under proximity the phone's momentum runs its course and the
-snap only takes over near the end of it, and the ends still rubber-band and
-settle the way a picker does.
+The reel does not snap at all. Mandatory snapping on iOS ends a flick at the
+next stop however hard it was thrown — one card a swipe, a list that cannot be
+spun. Proximity was meant to be the middle of it and is not: it still takes the
+scroller off the momentum it was given, and what that feels like is the thing
+locking under your thumb.
 
-What proximity gives up is the guarantee, and the middle of this screen is a
-choice, so it cannot be given up: the loop watches for a scroller that has
-stopped anywhere but on a card and sends it to the nearest one. Four still
-frames before it believes the scrolling is over, and never while a finger is
-down.
-
-## The tick
-
-Safari has no Vibration API. `navigator.vibrate` is not on any iPhone and never
-has been, so the usual answer does not exist here.
-
-What does exist is the switch control Apple added in Safari 17.4: toggling one
-plays the system's own haptic. So there is a switch on the page that nobody can
-see and every detent flips it — a day passing the middle, a month, a card. Two
-ticks closer together than forty milliseconds are one tick as far as a hand is
-concerned, so they are not sent.
-
-It is a trick and it is written down as one. If a Safari stops ringing it, the
-scrolling goes on working exactly as it did and the phone goes quiet, which is
-the right way round for something that is decoration on a gesture.
-
-## The column is what the screen leaves
-
-Every cell in the three rails is `flex-1` in the file — an equal share of what is
-left once the rules and the gaps are taken out. 95.333, 42 and 68 are what those
-shares come to at the 402 the file is drawn at, and they are not the design: the
-shares are.
-
-Pinned to those pixel widths, the four distances — which come to exactly one
-column — came to a column and a bit on a 393 phone, so the row scrolled when it
-should have sat still, shunted 41 points out of place with its last chip over
-the edge. The shares are worked out from the column the screen actually leaves
-now, and a row that already fits does not get the half-cell of air either.
-
-## Off the file, not off a glance
-
-Every measurement is node 800:5314's: 36 down either side, 65 above the mark, 36
-to the calendar and 36 to the cards, 33 to the tabs and 37 under them; 12
-between the calendar's three rows and 6 between everything inside one; 2 for
-every rule, rounded at 33 in the months, 80 in the days and the distance, 59 in
-the tabs; 12pt type at 0.24 tracking and 1.2 leading, cap-trimmed. The three
-rails' cells are what 330 comes out at once the gaps and the rules are taken
-out — 95.333, 42 and 68 — and half the suite is that arithmetic, because a
-screen that has drifted two points from the design survives every glance and
-none of it.
-
-The file gives the chosen day a black block with a light green rule through it
-and gives the months, the distances and the tabs nothing at all. Dimming the
-ones that are not chosen was mine, and it is gone: if those rows want a chosen
-state it is a decision for the file to make.
-
-What is not taken from the file is the phone the file draws around itself — its
-corners, its notch, its home indicator. This runs on one, so those are the
-device's and what is left is the safe areas.
+So the phone's own scrolling is left entirely alone, and where a flick comes to
+rest is put right afterwards: the loop watches for a scroller that has stopped
+anywhere but on a card and sends it to the nearest one. An eighth of a second of
+complete stillness before it believes the scrolling is over — a bounce at the
+top, a finger resting, a wheel between notches, none of those are finished — and
+never while a finger is down.

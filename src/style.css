@@ -353,16 +353,17 @@ body.starting .screen {
   overflow-y: auto;
   overflow-x: hidden;
   /*
-   * Proximity, not mandatory.
+   * No snapping at all.
    *
-   * Mandatory snapping on iOS ends a flick at the next stop, however hard it
-   * was thrown: the list moves one card per swipe and cannot be spun. Under
-   * proximity the phone's momentum runs its course and the snap only takes over
-   * near the end of it — so it can be spun and caught, and what it comes to
-   * rest on is still a card, with the loop putting it exactly on one if the
-   * momentum happens to die between two.
+   * Mandatory snapping on iOS ends a flick at the next stop however hard it was
+   * thrown — one card a swipe, a list that cannot be spun. Proximity was meant
+   * to be the middle of it and is not: it still takes the scroller off the
+   * momentum it was given, and what it feels like is the thing locking. So the
+   * phone's own scrolling is left entirely alone, and where a flick comes to
+   * rest is put right afterwards by the loop, which is the one moment nobody is
+   * touching it.
    */
-  scroll-snap-type: y proximity;
+  scroll-snap-type: none;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
@@ -374,7 +375,6 @@ body.starting .screen {
 
 .reel > i {
   display: block;
-  scroll-snap-align: center;
 }
 
 /* -------------------------------------------------------------- the tabs --- */

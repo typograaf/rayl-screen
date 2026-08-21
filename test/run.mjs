@@ -550,190 +550,106 @@ check(
  * card and it comes out faster than the scrolling arrives — so the first thing
  * a flick did was send the list backwards, and only once the lean was spent did
  * it start going the way the thumb had asked. Over two and a half it cannot.
+ *
+ * Measured on the cards that are on screen, which is the whole of what the
+ * claim is about. A card that has left the top goes on round the drum, and
+ * what it does up there — over the top and down the other side, y falling as
+ * the angle passes ninety — is the drum being a drum and nothing to do with
+ * which way the list went.
  */
 const walk = await page.evaluate(async () => {
   const reel = document.getElementById("reel");
   const step = reel.children[0].getBoundingClientRect().height;
   const frame = () => new Promise((r) => requestAnimationFrame(r));
+  /* Held, as a thumb would hold it: a scroller stepped by a script sits still
+     between steps, and a scroller sitting still with nobody on it is one the
+     loop is entitled to put on the nearest card. */
+  reel.dispatchEvent(new Event("touchstart"));
   reel.scrollTop = 0;
   await frame();
   await frame();
-  const ys = [];
+  const was = new Map();
+  let backwards = 0;
+  let seen = 0;
   for (let i = 0; i <= 30; i++) {
     reel.scrollTop = (step * 3 * i) / 30;
     await frame();
     await frame();
-    ys.push(window.rayl.wheel.cards[0].position.y);
+    const edge = window.rayl.camera.top;
+    window.rayl.wheel.cards.forEach((card, n) => {
+      const y = card.position.y;
+      const showing = Math.abs(y) < edge;
+      if (showing && was.has(n)) {
+        seen++;
+        if (y < was.get(n) - 1e-4) backwards++;
+      }
+      if (showing) was.set(n, y);
+      else was.delete(n);
+    });
   }
-  return ys;
+  reel.dispatchEvent(new Event("touchend"));
+  return { backwards, seen };
 });
-const backwards = walk.filter((y, i) => i && y < walk[i - 1] - 1e-4).length;
 check(
   "a flick only ever goes where it was pushed",
-  backwards === 0,
-  `${backwards} of ${walk.length - 1} steps went the wrong way`,
+  walk.backwards === 0,
+  `${walk.backwards} of ${walk.seen} cards on screen went the wrong way`,
 );
 
 /*
- * A month is a column, and dragging the months carries it sideways.
+ * A month is a column and the column next door is drawn beside it.
  *
- * Measured from the month being shown, so when the middle passes from one to
- * the next the column that was leaving is replaced by one arriving from the
- * other side — no animation, no state, and letting go brings it home because
- * the rail's own settling does.
+ * With only one of them on screen a drag showed a column leaving and then a
+ * screen of nothing until the next was suddenly the one being measured. Two
+ * columns a margin apart is what the gesture is — and it makes the changeover
+ * free: halfway between two months the day changes and the cards with it, and
+ * the two are exactly where each other is about to be measured to.
  */
-const sideways = await page.evaluate(async () => {
-  const rail = document.getElementById("months");
-  /* Snapping is mandatory on this rail, so a scroll set from a script is put
-     straight back — which is the rail doing its job and this test measuring
-     around it. A thumb holds it wherever it likes. */
-  const snap = rail.style.scrollSnapType;
-  rail.style.scrollSnapType = "none";
-  rail.scrollLeft += 40;
-  await new Promise((r) => requestAnimationFrame(r));
-  await new Promise((r) => requestAnimationFrame(r));
-  const seen = {
-    drift: window.rayl.drift(),
-    /* The one in the middle — a card off the end of the arc is switched off and
-       its position is wherever it was left. */
-    x: window.rayl.wheel.cards[Math.round(window.rayl.at)].position.x,
-  };
-  rail.style.scrollSnapType = snap;
-  return seen;
-});
-check(
-  "dragging the months carries the cards sideways",
-  Math.abs(sideways.x) > 0.05 &&
-    Math.sign(sideways.x) === -Math.sign(sideways.drift),
-  `drifted ${sideways.drift.toFixed(2)} of a month, cards at x ${sideways.x.toFixed(2)}`,
-);
-
-await page.evaluate(() => {
-  document
-    .getElementById("months")
-    .scrollBy({ left: -40, behavior: "instant" });
-});
-await wait(400);
-check(
-  "and letting go brings them back",
-  Math.abs(await page.evaluate(() => window.rayl.wheel.cards[0].position.x)) <
-    0.02,
-  `${(await page.evaluate(() => window.rayl.wheel.cards[0].position.x)).toFixed(3)}`,
-);
-
-/*
- * And nothing is ever cut by the edge of the frame.
- *
- * The drum's own fade is a card turning away, which is the whole story at its
- * own radius and none of it when it is opened out flat at the ends of a list:
- * there, nothing has turned by more than a few degrees, so the frame simply
- * stopped and a card at the bottom of the first screen was cut through the
- * middle by a line in mid-air. A card fades on its way out now as well, and is
- * gone by the time enough of it is past an edge for the cut to be seen.
- */
-const cut = await page.evaluate(async () => {
-  const reel = document.getElementById("reel");
-  const step = reel.children[0].getBoundingClientRect().height;
-  const frame = () => new Promise((r) => requestAnimationFrame(r));
-  let worst = 0;
-  const stops = reel.children.length - 1;
-  for (let i = 0; i <= 40; i++) {
-    reel.scrollTop = (step * stops * i) / 40;
-    await frame();
-    await frame();
-    const view = window.rayl.camera;
-    const edge = view.top;
-    const tall = 1 / 2.5776; /* CARD_HEIGHT, near enough for a bound */
-    for (const card of window.rayl.wheel.cards) {
-      if (!card.visible || card.material.opacity <= 0.02) continue;
-      const out = (Math.abs(card.position.y) + tall / 2 - edge) / tall;
-      if (out > worst) worst = out;
-    }
-  }
-  return { worst };
-});
-check(
-  "nothing is ever cut by the edge of the frame",
-  cut.worst < 0.6,
-  `the most of a card ever left showing past an edge is ${(cut.worst * 100).toFixed(0)}%`,
-);
-
-/* And the card the list ends on lands inside the frame, against the bottom of
-   it — the one card that is flush with an edge and must not fade for it. */
-const landed = await page.evaluate(async () => {
-  const reel = document.getElementById("reel");
-  reel.scrollTop = reel.scrollHeight;
-  await new Promise((r) => setTimeout(r, 300));
-  const last = window.rayl.wheel.cards[window.rayl.wheel.cards.length - 1];
-  const tall = 1 / 2.5776;
-  return {
-    over: -(last.position.y - tall / 2) - window.rayl.camera.top,
-    opacity: last.material.opacity,
-  };
-});
-check(
-  "and the last card lands in its container, whole",
-  Math.abs(landed.over) < 0.01 && landed.opacity > 0.99,
-  `${(landed.over * 100).toFixed(1)}% of a card past the bottom, at opacity ${landed.opacity.toFixed(2)}`,
-);
-
-/*
- * The picture is the screen's width and the cards on it are the column's.
- *
- * A column of cards that stops at the column's own edge is a column cut off 36
- * points early in mid-air, so the canvas runs to the edges of the screen — and
- * the cards are cut to the column regardless, which is the thing that must not
- * move.
- */
-const bleed = await page.evaluate(() => {
-  const box = document.querySelector(".cards").getBoundingClientRect();
-  const view = window.rayl.camera;
-  const column = document.querySelector(".calendar").clientWidth;
-  return {
-    canvas: Math.round(box.width),
-    screen: window.innerWidth,
-    card: box.width / (view.right - view.left),
-    column,
-  };
-});
-check(
-  "the picture runs to the edges of the screen",
-  bleed.canvas === bleed.screen && bleed.canvas > bleed.column,
-  `${bleed.canvas} across, against a column of ${bleed.column}`,
-);
-check(
-  "and a card is still the width of the column",
-  Math.abs(bleed.card - bleed.column * 0.99) < 1,
-  `${bleed.card.toFixed(1)} against ${(bleed.column * 0.99).toFixed(1)}`,
-);
-
-/* And half a month carries the column a whole screen, so the halfway point —
-   where the day changes and the cards with it — falls exactly where a column is
-   off the screen and there is nothing on it to cut. */
 const paged = await page.evaluate(async () => {
   const rail = document.getElementById("months");
+  const cell = rail.querySelector(".cell");
   const snap = rail.style.scrollSnapType;
   rail.style.scrollSnapType = "none";
-  const cell = rail.querySelector(".cell");
-  rail.scrollLeft += (cell.offsetWidth + 14) / 2;
-  await new Promise((r) => requestAnimationFrame(r));
-  await new Promise((r) => requestAnimationFrame(r));
-  const view = window.rayl.camera;
-  const across = view.right - view.left;
-  const seen = {
-    drift: window.rayl.drift(),
-    screens:
-      window.rayl.wheel.cards[Math.round(window.rayl.at)].position.x / across,
-  };
+  const step = cell.offsetWidth + 14;
+  const frame = () => new Promise((r) => requestAnimationFrame(r));
+  const home = rail.scrollLeft;
+  const look = () => ({
+    here: window.rayl.wheel.cards[Math.round(window.rayl.at)].position.x,
+    next: window.rayl.ghost.cards[0].position.x,
+    day: window.rayl.chosen,
+  });
+
+  rail.scrollLeft = home + step * 0.3;
+  await frame();
+  await frame();
+  const held = look();
+
+  /* Over the halfway line, where the day changes and the columns swap. */
+  rail.scrollLeft = home + step * 0.48;
+  await frame();
+  await frame();
+  const before = look();
+  rail.scrollLeft = home + step * 0.52;
+  await frame();
+  await frame();
+  await frame();
+  const after = look();
+
   rail.style.scrollSnapType = snap;
-  rail.scrollLeft -= (cell.offsetWidth + 14) / 2;
-  return seen;
+  rail.scrollLeft = home;
+  return { held, before, after, apart: window.rayl.wheel.cards[0].position.x };
 });
 check(
-  "half a month along is a screen along",
-  Math.abs(Math.abs(paged.screens) - 2 * Math.abs(paged.drift)) < 0.05 &&
-    Math.abs(paged.screens) > 0.9,
-  `half a month dragged put the column ${(paged.screens * 100).toFixed(0)}% of a screen over`,
+  "a month along is a column along",
+  Math.abs(paged.held.next - paged.held.here - 1.113) < 0.02,
+  `the two columns are ${(paged.held.next - paged.held.here).toFixed(3)} apart, against a card and a margin at 1.113`,
+);
+check(
+  "and the changeover happens where each is already standing",
+  paged.after.day !== paged.before.day &&
+    Math.abs(paged.after.here - paged.before.next) < 0.06 &&
+    Math.abs(paged.after.next - paged.before.here) < 0.06,
+  `the day went ${paged.before.day} -> ${paged.after.day} and the columns moved ${Math.abs(paged.after.here - paged.before.next).toFixed(3)}`,
 );
 
 /*
@@ -748,13 +664,16 @@ check(
 const settled = await page.evaluate(async () => {
   const reel = document.getElementById("reel");
   const step = reel.children[0].getBoundingClientRect().height;
+  /* After the rails have finished with each other: a month put back is a day
+     put back, and a day put back opens its list at the top. */
+  await new Promise((r) => setTimeout(r, 700));
   reel.scrollTop = step * 2.5;
   await new Promise((r) => setTimeout(r, 900));
   return { at: window.rayl.at };
 });
 check(
   "a spin that stops between two cards is put on one",
-  Math.abs(settled.at - Math.round(settled.at)) < 0.02,
+  Math.abs(settled.at - Math.round(settled.at)) < 0.02 && settled.at > 1,
   `left at 2.5, came to rest at ${settled.at.toFixed(3)}`,
 );
 

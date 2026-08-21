@@ -85,6 +85,18 @@ const FLAT = 10;
  */
 const OPEN = 2.5;
 
+/*
+ * The design's margin, and the one number the edges of the picture are made of.
+ *
+ * A list lands a margin inside the frame rather than flush against it, and a
+ * card fades out over that same margin on its way to the edge — so the card
+ * that ends a list sits exactly on the line the fade begins at and is whole,
+ * and any card carrying on past it is gone before there is anything to cut.
+ * The columns are a margin apart for the same reason they are 36 apart from
+ * everything else on the screen.
+ */
+const MARGIN = 36;
+
 const DISTANCES = ["<5km", "<20km", "<50km", "<100km", "Custom"];
 
 const canvas = document.getElementById("stage");
@@ -115,6 +127,10 @@ camera.position.set(0, 0, 8);
 camera.lookAt(0, 0, 0);
 
 let wheel = null;
+/* The column next door, and the day it is showing. Only ever on screen while a
+   month is under a hand. */
+let ghost = null;
+let ghostDay = -1;
 let needs = true;
 const mark = () => {
   needs = true;
@@ -227,8 +243,8 @@ function showDay(index, { jump = true } = {}) {
   mark();
 }
 
-function pushSurface() {
-  wheel.setSurface({
+function pushSurface(on = wheel) {
+  on.setSurface({
     colour: LOOK.colour,
     roughness: LOOK.roughness,
     sheen: 0.5,
@@ -579,10 +595,79 @@ function half() {
   return canvas.clientHeight / (cardPx() || 1) / 2;
 }
 
-/** Half the frame less half a card: how far the wheel has to slide for the card
-    at the end to sit against the edge. */
+/** The margin, in the world's units — a card being one across. */
+function margin() {
+  return MARGIN / (cardPx() || 1);
+}
+
+/** One column to the next: a card and the margin between them. */
+function column() {
+  return 1 + margin();
+}
+
+/** Half the frame, less half a card, less the margin: how far the wheel has to
+    slide for the card at the end to land inside the frame. */
 function room() {
-  return half() - CARD_HEIGHT / 2;
+  return half() - CARD_HEIGHT / 2 - margin();
+}
+
+/*
+ * The column the month next door would show, drawn beside the one on screen.
+ *
+ * A month is a column and dragging the months carries it sideways — but with
+ * only one column ever drawn, what a drag actually showed was a column leaving
+ * and then a screen of nothing until the next one was suddenly the one being
+ * measured. Two columns and a margin between them is what the gesture is: the
+ * one going and the one coming, both under the hand at once.
+ *
+ * It also makes the changeover free. Halfway between two months the day changes
+ * and the cards with it, and at that moment this column is exactly where the
+ * one on screen is about to be measured to — so the two swap places and nothing
+ * moves.
+ *
+ * Rebuilt only when it is a different day, which under a hand is once: a day's
+ * shifts are made from its date, and making fourteen cards on every frame of a
+ * drag is the kind of thing that is felt rather than seen.
+ */
+function nextDoor() {
+  const way = Math.sign(slid);
+  const found = rails.months;
+  /* The month being moved towards — which after the changeover is the one just
+     left, so the two swap and neither of them moves. */
+  const month = found ? found.showing() + way : -1;
+  const day =
+    !way || !found || month < 0 || month >= calendar.months.length
+      ? -1
+      : dayInMonth(calendar, month, calendar.days[chosen].number);
+  if (day < 0) {
+    if (ghostDay !== -1) {
+      ghost.hide();
+      ghostDay = -1;
+    }
+    return;
+  }
+  if (day !== ghostDay) {
+    ghostDay = day;
+    const list = shiftsOn(calendar.days[day].date);
+    ghost.setCount(list.length);
+    ghost.setArt(list);
+    pushSurface(ghost);
+  }
+  /* At the top of its own list, which is where it will be when it arrives:
+     showing a day opens it at its first card. */
+  ghost.update({
+    radius: FLAT,
+    spacing: LOOK.spacing,
+    arc: LOOK.arc,
+    fade: LOOK.fade,
+    scroll: 0,
+    thickness: LOOK.depth,
+    cycle: false,
+    lean: room(),
+    slide: -slid * column() + way * column(),
+    frame: half(),
+    edge: margin(),
+  });
 }
 
 function draw() {
@@ -596,10 +681,12 @@ function draw() {
       at = now;
       needs = true;
       still = 0;
-    } else if (!held && ++still === 4) {
-      /* Stopped, and stopped between two cards: on to the nearer one. The four
-         frames are so that a scroller which has merely paused — the top of a
-         bounce, a finger resting — is not taken for one that has finished. */
+    } else if (!held && ++still === 8) {
+      /* Stopped, and stopped between two cards: on to the nearer one. The
+         eight frames are an eighth of a second of complete stillness, so that a
+         scroller which has merely paused — the top of a bounce, a finger
+         resting, a wheel between notches — is not taken for one that has
+         finished. */
       const want = Math.round(at) * step;
       if (Math.abs(reel.scrollTop - want) > 0.5)
         reel.scrollTo({ top: want, behavior: "smooth" });
@@ -633,20 +720,17 @@ function draw() {
     cycle: false,
     lean: (1 - open) * (at <= span / 2 ? room() : -room()),
     /*
-     * Half a month along is a screen along, and that is the number that makes
-     * it a column rather than a jump.
-     *
-     * Half a month is where the middle passes from one month to the next, which
-     * is the moment the day changes and the cards with it: the column being
-     * measured stops being the one that was leaving and becomes the one that
-     * has arrived, at the same distance out the other side. Whatever is on
-     * screen at that moment is cut to whatever is on screen after it — so the
-     * travel is set to put the changeover exactly where a column is one whole
-     * screen out and there is nothing on screen to cut.
+     * A month along is a column along: a card and a margin, the same 36 that
+     * separates everything else on this screen. The one going and the one
+     * coming are both drawn, so the changeover in the middle — where the day
+     * changes and the cards with it — lands with each of them exactly where the
+     * other one was, and there is nothing to see happen.
      */
-    slide: (-slid * 2 * canvas.clientWidth) / (cardPx() || 1),
+    slide: -slid * column(),
     frame: half(),
+    edge: margin(),
   });
+  nextDoor();
   renderer.render(scene, camera);
 }
 
@@ -659,6 +743,7 @@ async function start() {
   ]);
 
   wheel = new Wheel(scene, geometry, atlas);
+  ghost = new Wheel(scene, geometry, atlas);
   lighting.set(LOOK.rig, LOOK.light);
   lighting.setLamps(
     LOOK.lamps.map((lamp) => ({
@@ -702,6 +787,12 @@ window.rayl = {
   camera,
   get wheel() {
     return wheel;
+  },
+  get ghost() {
+    return ghost;
+  },
+  get ghostDay() {
+    return ghostDay;
   },
   get chosen() {
     return chosen;
