@@ -123,6 +123,7 @@ let wheel = null;
    month is under a hand. */
 let ghost = null;
 let ghostDay = -1;
+let ghostOrigin = 0;
 let needs = true;
 const mark = () => {
   needs = true;
@@ -275,7 +276,25 @@ function shiftsOn(date) {
   return Array.from({ length: many }, () => Math.floor(next() * CARD_COUNT));
 }
 
+/*
+ * How many of the days either side of this one the drum also carries.
+ *
+ * The frame holds about three cards and a list has to fill it, including at its
+ * own ends — where there is nothing above the first card and nothing below the
+ * last, and centring the chosen one leaves half a screen of empty paper. It is
+ * a rota, though, and there is no such thing as nothing above the first shift
+ * of a day: there is the last shift of the day before. So the drum carries two
+ * of those at each end, faded like every other card that far out.
+ *
+ * They are not stops on the reel. The list you are scrolling is the day's, and
+ * what is above and below it is the rota carrying on.
+ */
+const EDGE = 2;
+
 let shifts = [];
+/* Where the day's own first card sits on the drum, the cards before it being
+   the day before's. */
+let origin = 0;
 /* How many times a day has been laid out, which is the count that says whether
    a month arrived in one move or walked there. */
 let built = 0;
@@ -289,14 +308,29 @@ function layReel() {
   for (const stop of reel.children) stop.style.height = `${step}px`;
 }
 
+/** A day's shifts, with the tail of the day before and the head of the day
+    after — which is what the drum carries and not what the reel stops on. */
+function runOf(index) {
+  const day = calendar.days[index];
+  const own = shiftsOn(day.date);
+  const before = calendar.days[index - 1]
+    ? shiftsOn(calendar.days[index - 1].date).slice(-EDGE)
+    : [];
+  const after = calendar.days[index + 1]
+    ? shiftsOn(calendar.days[index + 1].date).slice(0, EDGE)
+    : [];
+  return { own, run: [...before, ...own, ...after], origin: before.length };
+}
+
 function showDay(index, { jump = true } = {}) {
   built++;
   chosen = index;
-  const day = calendar.days[chosen];
-  shifts = shiftsOn(day.date);
+  const day = runOf(index);
+  shifts = day.own;
+  origin = day.origin;
 
-  wheel.setCount(shifts.length);
-  wheel.setArt(shifts);
+  wheel.setCount(day.run.length);
+  wheel.setArt(day.run);
   pushSurface();
 
   reel.replaceChildren(...shifts.map(() => document.createElement("i")));
@@ -376,22 +410,36 @@ function mountRail(name, cells, onSettle) {
    * the opposite: it makes a row that fits into a row that scrolls, and shunts
    * it 41 points off the column it is supposed to sit flush in.
    */
-  /* The one measurement a rail needs, taken when its cells change size and not
-     again: where the cells start, how wide one is, and how far to the next. */
+  /*
+   * The one measurement a rail needs, taken when its cells change size and not
+   * again: where the cells start, how wide one is, and how far to the next.
+   *
+   * In fractions of a pixel, and that is the whole point of it. A cell here is
+   * 106.33 across, and `offsetLeft` is rounded to whole pixels — so a pitch
+   * taken from two neighbours is out by a third of a pixel and a month forty
+   * along is out by thirteen. Which is a rail that can never be home: the
+   * columns sit a few points off the middle of the screen and a sliver of the
+   * month next door shows at the edge, at rest, for no reason anybody could
+   * see. Measured across the whole run instead, the error divides away.
+   */
   const shape = { first: 0, wide: 1, pitch: 1, count: 0 };
   const fit = () => {
     rail.style.paddingInline = "0px";
     const fits = rail.scrollWidth <= rail.clientWidth + 1;
     rail.dataset.fits = String(fits);
     if (!fits) rail.style.paddingInline = "";
-    const one = rail.querySelector(".cell");
-    const two = one?.nextElementSibling?.classList.contains("cell")
-      ? one.nextElementSibling
-      : one?.nextElementSibling?.nextElementSibling;
-    shape.count = rail.querySelectorAll(".cell").length;
-    shape.first = one ? one.offsetLeft : 0;
-    shape.wide = one ? one.offsetWidth : 1;
-    shape.pitch = two ? two.offsetLeft - one.offsetLeft : shape.wide || 1;
+    const cells = rail.querySelectorAll(".cell");
+    shape.count = cells.length;
+    if (!cells.length) return;
+    const from = rail.getBoundingClientRect().left - rail.scrollLeft;
+    const one = cells[0].getBoundingClientRect();
+    const last = cells[cells.length - 1].getBoundingClientRect();
+    shape.first = one.left - from;
+    shape.wide = one.width;
+    shape.pitch =
+      cells.length > 1
+        ? (last.left - one.left) / (cells.length - 1)
+        : one.width || 1;
   };
   fit();
   window.addEventListener("resize", fit);
@@ -444,7 +492,14 @@ function mountRail(name, cells, onSettle) {
     onSettle(now, found.driven);
   };
 
-  rail.addEventListener("scroll", settle, { passive: true });
+  rail.addEventListener(
+    "scroll",
+    () => {
+      found.moved = performance.now();
+      settle();
+    },
+    { passive: true },
+  );
 
   /*
    * And a cell can be pressed.
@@ -506,6 +561,9 @@ function mountRail(name, cells, onSettle) {
     },
     fit,
     held: false,
+    /* When it last moved, so that what only belongs on screen during a gesture
+       can tell a gesture from a rail sitting still. */
+    moved: 0,
     driven: false,
     /* Cleared when the scroll it started has stopped, or after long enough that
        it must have. */
@@ -709,7 +767,10 @@ function drift() {
    * a sliver of the month next door showing at the edge, at rest, for no reason
    * anybody could see. Under a hand this much is nothing.
    */
-  if (Math.abs(off) < 0.02) return 0;
+  if (Math.abs(off) < 0.004) return 0;
+  /* And a rail nobody has touched for half a second is not being dragged: the
+     column next door belongs to the gesture, not to the screen. */
+  if (!found.held && performance.now() - found.moved > 500) return 0;
   return Math.max(-0.6, Math.min(off, 0.6));
 }
 
@@ -765,9 +826,10 @@ function nextDoor() {
   }
   if (day !== ghostDay) {
     ghostDay = day;
-    const list = shiftsOn(calendar.days[day].date);
-    ghost.setCount(list.length);
-    ghost.setArt(list);
+    const run = runOf(day);
+    ghostOrigin = run.origin;
+    ghost.setCount(run.run.length);
+    ghost.setArt(run.run);
     pushSurface(ghost);
   }
   /* At the top of its own list, which is where it will be when it arrives:
@@ -777,7 +839,7 @@ function nextDoor() {
     spacing: LOOK.spacing,
     arc: LOOK.arc,
     fade: LOOK.fade,
-    scroll: 0,
+    scroll: ghostOrigin,
     thickness: LOOK.depth,
     cycle: false,
     slide: -slid * column() + way * column(),
@@ -829,7 +891,9 @@ function draw() {
     spacing: LOOK.spacing,
     arc: LOOK.arc,
     fade: LOOK.fade,
-    scroll: at,
+    /* The day's first card is not the drum's first card: the ones before it are
+       yesterday's, and the scroll is counted from the day's own. */
+    scroll: at + origin,
     thickness: LOOK.depth,
     cycle: false,
     /*
@@ -918,6 +982,9 @@ window.rayl = {
   },
   get shifts() {
     return shifts;
+  },
+  get origin() {
+    return origin;
   },
   get built() {
     return built;

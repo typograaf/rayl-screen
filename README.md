@@ -114,6 +114,14 @@ to. It used to ask every cell where it was, which is a measurement each and a
 layout each, on every scroll event of every rail. That was survivable at six
 months and is not survivable at a hundred.
 
+**In fractions of a pixel, and that is the whole point of it.** A cell is 106.33
+across and `offsetLeft` is rounded to whole pixels, so a pitch taken from two
+neighbours is out by a third of a pixel and a month forty along is out by
+thirteen — a rail that can never be home, columns sitting a few points off the
+middle of the screen, and a sliver of the month next door showing at the edge at
+rest for no reason anybody could see. Measured across the whole run, the error
+divides away.
+
 Neither pushes back on the other, and the way that is arranged took two goes.
 
 The two things a rail does when it settles are told apart: what it is _for_
@@ -132,9 +140,16 @@ gets laid out.
 ## Every rest is the same picture
 
 The card that is chosen is in the middle of the frame, wherever in the list it
-is. One faded card above it, one below, and at either end of the list one of
-those two is simply absent — a list that has ended looks like a list that has
-ended.
+is: one faded card above it, one below, and the same three places every time it
+comes to rest.
+
+**Including at the ends of a list**, where there is nothing above the first card
+and nothing below the last and centring the chosen one would leave half a screen
+of empty paper. It is a rota, though, and there is no such thing as nothing
+above the first shift of a day: there is the last shift of the day before. The
+drum carries two of those at either end, faded like every other card that far
+out. They are not stops on the reel — the list being scrolled is the day's, and
+what is above and below it is the rota carrying on.
 
 It used to open out. At either end the wheel flattened to nearly a straight line
 and leaned far enough up or down that the card at that end sat against the edge
@@ -146,8 +161,8 @@ out of the frame — and near the end of a list the same thing the other way up.
 The middle is what is chosen, so the middle is where it goes, and the emptiness
 above the first card is what the top of a list is.
 
-The suite stops at six places in a list, three of them inside it, and fails if
-the chosen card is anywhere but the middle or if the three cards on screen stand
+The suite stops at six places in a list, both ends included, and fails if the
+chosen card is anywhere but the middle or if the three cards on screen stand
 anywhere but where they stood at the last one.
 
 ## A month is a column

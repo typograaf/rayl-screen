@@ -421,7 +421,12 @@ const middle = await page.evaluate(() => {
     }))
     .filter((card) => card.on)
     .sort((a, b) => a.y - b.y);
-  return { nearest: near[0].index, stoppedOn: Math.round(window.rayl.at) };
+  /* Counted from the day's own first card: the ones before it on the drum are
+     the day before's. */
+  return {
+    nearest: near[0].index - window.rayl.origin,
+    stoppedOn: Math.round(window.rayl.at),
+  };
 });
 check(
   "and the card in the middle is the one it stopped on",
@@ -522,7 +527,7 @@ const rests = await page.evaluate(async () => {
     await frame();
     seen.push({
       on,
-      y: window.rayl.wheel.cards[on].position.y,
+      y: window.rayl.wheel.cards[window.rayl.origin + on].position.y,
       /* What the frame holds at that rest, top first. */
       showing: window.rayl.wheel.cards
         .filter((card) => card.visible && card.material.opacity > 0.05)
@@ -540,29 +545,25 @@ check(
   `the furthest any of six rests came to rest from the middle is ${(off * 1000).toFixed(1)} thousandths of a card`,
 );
 
-/* And every rest with a list either side of it is the same picture — three
-   cards in the same three places, which is the whole of what consistent means
-   here. The ends hold two, standing where those same three stand. */
-const middles = rests.filter((r) => r.showing.length === 3);
-const spread = middles.length
-  ? Math.max(
-      ...middles.flatMap((r) =>
-        r.showing.map((y, i) => Math.abs(y - middles[0].showing[i])),
-      ),
-    )
-  : 1;
-check(
-  "and every rest inside the list is the same picture",
-  middles.length >= 3 && spread < 0.005,
-  `${middles.length} of ${rests.length} rests hold three cards, within ${(spread * 1000).toFixed(1)} thousandths of each other`,
+/*
+ * And every rest is the same picture — the ends of the list included.
+ *
+ * Three cards in the same three places, whichever card is chosen. The frame
+ * holds about three and a list has to fill it at its own ends too, where there
+ * is nothing above the first card and nothing below the last. It is a rota,
+ * though, and there is no such thing as nothing above the first shift of a day:
+ * there is the last shift of the day before, and the drum carries two of those
+ * at either end.
+ */
+const spread = Math.max(
+  ...rests.flatMap((r) =>
+    r.showing.map((y, i) => Math.abs(y - rests[0].showing[i])),
+  ),
 );
 check(
-  "and the ends of it are that picture with fewer cards",
-  rests[0].showing.length === 2 &&
-    rests.at(-1).showing.length === 2 &&
-    Math.abs(rests[0].showing[1] - middles[0].showing[2]) < 0.005 &&
-    Math.abs(rests.at(-1).showing[0] - middles[0].showing[0]) < 0.005,
-  `two cards at either end of the list, standing where the run stands`,
+  "and every rest is the same picture, the ends of the list included",
+  rests.every((r) => r.showing.length === 3) && spread < 0.005,
+  `all ${rests.length} rests hold three cards, within ${(spread * 1000).toFixed(1)} thousandths of each other`,
 );
 
 /*
@@ -656,7 +657,8 @@ const sideways = await page.evaluate(async () => {
     drift: window.rayl.drift(),
     /* The one in the middle — a card off the end of the arc is switched off and
        its position is wherever it was left. */
-    x: window.rayl.wheel.cards[Math.round(window.rayl.at)].position.x,
+    x: window.rayl.wheel.cards[window.rayl.origin + Math.round(window.rayl.at)]
+      .position.x,
   };
   rail.style.scrollSnapType = snap;
   return seen;
@@ -759,7 +761,9 @@ const paged = await page.evaluate(async () => {
   const frame = () => new Promise((r) => requestAnimationFrame(r));
   const home = rail.scrollLeft;
   const look = () => ({
-    here: window.rayl.wheel.cards[Math.round(window.rayl.at)].position.x,
+    here: window.rayl.wheel.cards[
+      window.rayl.origin + Math.round(window.rayl.at)
+    ].position.x,
     next: window.rayl.ghost.cards[0].position.x,
     day: window.rayl.chosen,
   });
