@@ -190,7 +190,13 @@ screen is on its way out the other.
 
 The cards themselves are swiped on a pager: three pages wide, sitting on the
 middle one, so a swipe is the phone's own scrolling with mandatory snapping and
-goes one day rather than four. When it lands on a side page the day changes and
+goes one day rather than four. **The days rail comes with it** — the same cells
+sliding under the same block as when the row itself is dragged, because the row
+is the only thing on the screen that says which day this is and a day being
+swiped through without it moving is the screen keeping a secret. It is muted
+while it is carried, and its snapping is off: a rail that answered would choose
+a day halfway through a swipe that has not landed, and a rail that snapped would
+be pulled off the finger between one frame and the next. When it lands on a side page the day changes and
 it goes back to the middle in the same breath, which nobody sees — at that
 moment the day going is a whole column off the screen and the day coming is dead
 centre, exactly where the day just chosen is about to be drawn.
@@ -225,6 +231,16 @@ window, and the renderer is told to keep its hands off the element's style: the
 sheet has the canvas at inset nought, which is right whatever else happens, and
 only the buffer belongs to the code. The suite moves 96 points of inset in after
 the fact and fails if the picture does not come with it.
+
+**And a rail that has stopped anywhere but exactly on its cell is put on it.** A
+snap lands where the browser puts it, which is not always the pixel this works
+its own arithmetic from — and on the days, where a cell is 42 across and a
+column is 354, one pixel out is seven points of column standing off the side of
+the screen. That is the sliver of the day next door that kept turning up at
+rest. There is nothing to see in the correction: a pixel or two, once the
+scrolling has stopped. The deadband that decides a column is home is in points
+of column for the same reason, since three points is a fifteenth of a month cell
+and a hundredth of a day, and it is the column that shows.
 
 ## The block does not flash
 

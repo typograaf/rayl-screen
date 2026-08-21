@@ -483,6 +483,10 @@ function mountRail(name, cells, onSettle) {
 
   let showing = -1;
   const settle = () => {
+    /* A rail being carried by something else does not answer: the cells slide
+       under the block, and what is chosen is not up for discussion until the
+       gesture that is carrying it has finished. */
+    if (found.muted) return;
     const now = chosenOf();
     if (now === showing) return;
     const was = showing;
@@ -578,6 +582,7 @@ function mountRail(name, cells, onSettle) {
     },
     fit,
     held: false,
+    muted: false,
     /* When it last moved, so that what only belongs on screen during a gesture
        can tell a gesture from a rail sitting still. */
     moved: 0,
@@ -588,6 +593,26 @@ function mountRail(name, cells, onSettle) {
   };
   rails[name] = found;
   return found;
+}
+
+/*
+ * A rail that has stopped anywhere but exactly on its cell is put on it.
+ *
+ * A snap lands where the browser puts it, which is not always the pixel this
+ * works its own arithmetic from, and on the days — where a cell is 42 across
+ * and a column is 354 — one pixel out is seven points of column standing off
+ * the side of the screen. Which is the sliver of the day next door that kept
+ * turning up at rest. There is nothing to see in the correction: it is a pixel
+ * or two, and it happens once the scrolling has stopped.
+ */
+function tidy(name) {
+  const found = rails[name];
+  if (!found || found.held || found.driven || found.muted) return;
+  if (!found.shape.pitch || performance.now() - found.moved < 120) return;
+  const want = home(found, found.showing());
+  const off = found.rail.scrollLeft - want;
+  if (Math.abs(off) > 0.5 && Math.abs(off) < found.shape.pitch / 2)
+    found.rail.scrollLeft = want;
 }
 
 /** Where a rail has to be scrolled to for a cell to be in its middle. */
@@ -791,7 +816,9 @@ for (const done of ["touchend", "touchcancel"]) {
 /** How far a rail has been dragged from the cell it is showing, in cells. */
 function railDrift(name) {
   const found = rails[name];
-  if (!found || found.driven) return 0;
+  /* A rail being carried by another gesture is not a gesture: what moved it is
+     already counted, and counting it twice slides the columns twice as far. */
+  if (!found || found.driven || found.muted) return 0;
   const step = found.shape.pitch;
   if (!step) return 0;
   const off = (found.rail.scrollLeft - home(found, found.showing())) / step;
@@ -840,6 +867,16 @@ function drift() {
   const days = railDrift("days");
   const months = railDrift("months");
   const off = swipe + days + months;
+  /*
+   * And under a few points of column there is nothing to draw.
+   *
+   * The deadbands on the rails are in cells, and a cell is not the same size in
+   * each of them: three points of column is a fifteenth of a month cell and a
+   * hundredth of a day. This is the one that matters, because it is the one
+   * that shows — a column standing three points off the middle of the screen is
+   * three points of the day next door at the edge of it.
+   */
+  if (Math.abs(off) * column() * cardPx() < 3) return { off: 0, day: -1 };
   let next = -1;
   if (swipe || days) {
     next = chosen + Math.sign(swipe + days);
@@ -941,6 +978,37 @@ function nextDoor() {
 }
 
 /*
+ * A swipe across the cards carries the days rail with it.
+ *
+ * The same cells sliding under the same block as when the row itself is
+ * dragged, because it is the same gesture asked for in another place — and the
+ * row is the only thing on the screen that says which day this is, so a day
+ * being swiped through without it moving is the screen keeping a secret.
+ *
+ * Muted while it is carried, and its snapping off: a rail that answered would
+ * choose a day halfway through a swipe that has not landed yet, and a rail that
+ * snapped would be pulled off the finger between one frame and the next.
+ */
+let carried = false;
+function carryDays(off) {
+  const found = rails.days;
+  if (!found || !found.shape.pitch) return;
+  if (off) {
+    if (!carried) {
+      carried = true;
+      found.muted = true;
+      found.rail.style.scrollSnapType = "none";
+    }
+    found.rail.scrollLeft = home(found, chosen) + off * found.shape.pitch;
+  } else if (carried) {
+    carried = false;
+    found.muted = false;
+    found.rail.style.scrollSnapType = "";
+    found.rail.scrollLeft = home(found, chosen);
+  }
+}
+
+/*
  * And a page that has landed on one side or the other is a day turned.
  *
  * The pager is put back on its middle page in the same breath, which nobody
@@ -955,6 +1023,9 @@ function turnPage() {
   if (Math.abs(off) < 0.98) return;
   const want = chosen + Math.sign(off);
   pager.scrollLeft = wide;
+  /* The rail is handed back before it is told anything: a rail being carried is
+     a rail that does not answer, and this is about to ask it to. */
+  carryDays(0);
   if (!calendar.days[want]) return;
   tick();
   /* The rails come with it, and the day is chosen by the same call that would
@@ -996,6 +1067,14 @@ function draw() {
   }
 
   turnPage();
+  const swipe = pageDrift();
+  carryDays(swipe);
+  for (const name of Object.keys(rails)) tidy(name);
+  if (!pagerHeld && !swipe && pager.clientWidth) {
+    /* And the pager itself, for the same reason. */
+    const off = pager.scrollLeft - pager.clientWidth;
+    if (Math.abs(off) > 0.5) pager.scrollLeft = pager.clientWidth;
+  }
   const sideways = drift();
   if (Math.abs(sideways.off - slid) > 1e-4 || sideways.day !== slidDay) {
     slid = sideways.off;

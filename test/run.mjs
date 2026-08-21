@@ -988,6 +988,87 @@ check(
 );
 
 /*
+ * And a swipe carries the days rail with it, cells sliding under the block.
+ *
+ * The same gesture asked for in another place, and the row is the only thing on
+ * the screen that says which day this is — so a day being swiped through
+ * without it moving is the screen keeping a secret. It is muted while it is
+ * carried and its snapping is off: a rail that answered would choose a day
+ * halfway through a swipe that has not landed, and a rail that snapped would be
+ * pulled off the finger between one frame and the next.
+ */
+const carried = await page.evaluate(async () => {
+  const r = window.rayl;
+  const pager = document.getElementById("pager");
+  const rail = document.getElementById("days");
+  const frame = () => new Promise((res) => requestAnimationFrame(res));
+  const block = () => {
+    const on = document.querySelector('.days .cell[data-on="true"]');
+    const row = rail.getBoundingClientRect();
+    const box = on.getBoundingClientRect();
+    return box.left + box.width / 2 - (row.left + row.width / 2);
+  };
+  await new Promise((res) => setTimeout(res, 700));
+  const snap = pager.style.scrollSnapType;
+  pager.style.scrollSnapType = "none";
+  pager.dispatchEvent(new Event("touchstart"));
+  const seen = [];
+  for (const off of [0.25, 0.5, 0.75]) {
+    pager.scrollLeft = pager.clientWidth * (1 + off);
+    await frame();
+    await frame();
+    seen.push({ off, block: block(), day: r.chosen, drift: r.drift() });
+  }
+  pager.dispatchEvent(new Event("touchend"));
+  pager.scrollLeft = pager.clientWidth;
+  await frame();
+  await frame();
+  pager.style.scrollSnapType = snap;
+  return { seen, home: block() };
+});
+const pitch = carried.seen[1].block / carried.seen[0].block;
+check(
+  "a swipe carries the days rail under the block",
+  carried.seen.every(
+    (one, i) => one.block < (i ? carried.seen[i - 1].block : 1) - 5,
+  ) && Math.abs(pitch - 2) < 0.2,
+  `a quarter, a half and three quarters of a swipe moved the row ${carried.seen.map((one) => one.block.toFixed(0)).join(", ")} points`,
+);
+check(
+  "and the day is not chosen until the swipe lands",
+  carried.seen.every((one) => one.day === carried.seen[0].day) &&
+    carried.seen.every((one) => Math.abs(one.drift - one.off) < 0.02) &&
+    Math.abs(carried.home) < 1,
+  `the day held through the swipe, the columns went exactly as far as the finger, and the block came home`,
+);
+
+/*
+ * And a rail resting a pixel off its cell is put on it.
+ *
+ * A snap lands where the browser puts it, which is not always the pixel this
+ * works its arithmetic from — and on the days, where a cell is 42 across and a
+ * column is 354, one pixel out is seven points of column standing off the side
+ * of the screen. Which is the sliver of the day next door that kept turning up
+ * at rest.
+ */
+const sliver = await page.evaluate(async () => {
+  const rail = document.getElementById("days");
+  await new Promise((res) => setTimeout(res, 500));
+  rail.scrollLeft += 1.4;
+  await new Promise((res) => setTimeout(res, 500));
+  return {
+    drift: window.rayl.drift(),
+    x: window.rayl.wheel.cards[window.rayl.origin].position.x,
+    ghost: window.rayl.ghost.cards.filter((card) => card.visible).length,
+  };
+});
+check(
+  "a rail left a pixel off its cell is put back on it",
+  sliver.drift === 0 && Math.abs(sliver.x) < 0.001 && sliver.ghost === 0,
+  `a pixel and a half off the day left the column at ${sliver.x.toFixed(4)} with nothing of the next day drawn`,
+);
+
+/*
  * And the black block does not flash across the calendar on the way.
  *
  * An instant scroll moves a rail inside the call that asks for it and the event
