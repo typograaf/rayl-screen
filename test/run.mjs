@@ -499,47 +499,186 @@ check(
 );
 
 /*
- * And the wheel opens out at the ends of a list.
+ * The card that is chosen is in the middle, wherever in the list it is.
  *
- * At rest the chosen card is the first one, so centring it leaves the top half
- * of the frame empty — which reads as a list that has lost something rather
- * than a list at its start. Flat and leaning, the first card sits at the top
- * and the rest run down the frame; a card in and it has curled back to its own
- * radius with the chosen one in the middle.
+ * The wheel used to flatten and lean at either end, so the first card sat at
+ * the top of the frame and the last at the bottom rather than one card in the
+ * middle of a half-empty frame. That filled the first screen and cost every
+ * screen after it: the lean is only spent two and a half cards in, so every
+ * card chosen before that came to rest somewhere other than the middle — the
+ * picture pushed down, a gap above it, the card below pushed out of the frame.
+ * The middle is what is chosen, so the middle is where it goes.
  */
-const opening = await page.evaluate(() => {
+const rests = await page.evaluate(async () => {
   const reel = document.getElementById("reel");
-  reel.scrollTop = 0;
-  window.rayl.draw?.();
-  return null;
+  const step = reel.children[0].getBoundingClientRect().height;
+  const stops = reel.children.length - 1;
+  const frame = () => new Promise((r) => requestAnimationFrame(r));
+  reel.dispatchEvent(new Event("touchstart"));
+  const seen = [];
+  for (const on of [0, 1, 2, Math.floor(stops / 2), stops - 1, stops]) {
+    reel.scrollTop = step * on;
+    await frame();
+    await frame();
+    seen.push({
+      on,
+      y: window.rayl.wheel.cards[on].position.y,
+      /* What the frame holds at that rest, top first. */
+      showing: window.rayl.wheel.cards
+        .filter((card) => card.visible && card.material.opacity > 0.05)
+        .map((card) => +card.position.y.toFixed(3))
+        .sort((a, b) => b - a),
+    });
+  }
+  reel.dispatchEvent(new Event("touchend"));
+  return seen;
 });
-await wait(500);
-const atRest = await page.evaluate(() => ({
-  curl: window.rayl.curl(),
-  first: window.rayl.wheel.cards[0].position.y,
-  second: window.rayl.wheel.cards[1].position.y,
-}));
+const off = Math.max(...rests.map((r) => Math.abs(r.y)));
 check(
-  "at rest the wheel is flat and the first card is at the top",
-  atRest.curl < 0.05 && atRest.first > 0.2 && atRest.second < atRest.first,
-  `curl ${atRest.curl.toFixed(2)}, first card at y ${atRest.first.toFixed(2)}`,
+  "the chosen card is in the middle wherever in the list it is",
+  off < 0.005,
+  `the furthest any of six rests came to rest from the middle is ${(off * 1000).toFixed(1)} thousandths of a card`,
+);
+
+/* And every rest with a list either side of it is the same picture — three
+   cards in the same three places, which is the whole of what consistent means
+   here. The ends hold two, standing where those same three stand. */
+const middles = rests.filter((r) => r.showing.length === 3);
+const spread = middles.length
+  ? Math.max(
+      ...middles.flatMap((r) =>
+        r.showing.map((y, i) => Math.abs(y - middles[0].showing[i])),
+      ),
+    )
+  : 1;
+check(
+  "and every rest inside the list is the same picture",
+  middles.length >= 3 && spread < 0.005,
+  `${middles.length} of ${rests.length} rests hold three cards, within ${(spread * 1000).toFixed(1)} thousandths of each other`,
+);
+check(
+  "and the ends of it are that picture with fewer cards",
+  rests[0].showing.length === 2 &&
+    rests.at(-1).showing.length === 2 &&
+    Math.abs(rests[0].showing[1] - middles[0].showing[2]) < 0.005 &&
+    Math.abs(rests.at(-1).showing[0] - middles[0].showing[0]) < 0.005,
+  `two cards at either end of the list, standing where the run stands`,
+);
+
+/*
+ * And nothing is ever cut by the edge of the frame.
+ *
+ * The drum's own fade is a card turning away, which is the whole story at its
+ * own radius. Fading a card by how much of it is already past an edge only dims
+ * it — a card three-quarters on at half opacity is still a card with a straight
+ * edge sawn through it — so the fade is over the last margin inside the frame
+ * instead, and it is spent by the time the card's own edge arrives at the
+ * frame's.
+ */
+const cut = await page.evaluate(async () => {
+  const reel = document.getElementById("reel");
+  const step = reel.children[0].getBoundingClientRect().height;
+  const frame = () => new Promise((r) => requestAnimationFrame(r));
+  const stops = reel.children.length - 1;
+  reel.dispatchEvent(new Event("touchstart"));
+  let worst = -Infinity;
+  for (let i = 0; i <= 40; i++) {
+    reel.scrollTop = (step * stops * i) / 40;
+    await frame();
+    await frame();
+    const edge = window.rayl.camera.top;
+    const tall = 1 / 2.5776; /* CARD_HEIGHT, near enough for a bound */
+    for (const card of window.rayl.wheel.cards) {
+      if (!card.visible || card.material.opacity <= 0.02) continue;
+      const out = (Math.abs(card.position.y) + tall / 2 - edge) / tall;
+      if (out > worst) worst = out;
+    }
+  }
+  reel.dispatchEvent(new Event("touchend"));
+  return { worst };
+});
+check(
+  "nothing is ever cut by the edge of the frame",
+  cut.worst <= 0.01,
+  cut.worst <= 0
+    ? `the nearest anything showing ever came to an edge is ${(-cut.worst * 100).toFixed(0)}% of a card inside it`
+    : `${(cut.worst * 100).toFixed(0)}% of a card was left showing past an edge`,
+);
+
+/*
+ * The picture is the screen's width and the cards on it are the column's.
+ *
+ * A column of cards that stops at the column's own edge is a column cut off 36
+ * points early in mid-air, so the canvas runs to the edges of the screen — and
+ * the cards are cut to the column regardless, which is the thing that must not
+ * move.
+ */
+const bleed = await page.evaluate(() => {
+  const box = document.querySelector(".cards").getBoundingClientRect();
+  const view = window.rayl.camera;
+  return {
+    canvas: Math.round(box.width),
+    screen: window.innerWidth,
+    card: box.width / (view.right - view.left),
+    column: document.querySelector(".calendar").clientWidth,
+  };
+});
+check(
+  "the picture runs to the edges of the screen",
+  bleed.canvas === bleed.screen && bleed.canvas > bleed.column,
+  `${bleed.canvas} across, against a column of ${bleed.column}`,
+);
+check(
+  "and a card is still the width of the column",
+  Math.abs(bleed.card - bleed.column * 0.99) < 1,
+  `${bleed.card.toFixed(1)} against ${(bleed.column * 0.99).toFixed(1)}`,
+);
+
+/*
+ * A month is a column, and dragging the months carries it sideways.
+ *
+ * Measured from the month being shown, so when the middle passes from one to
+ * the next the column that was leaving is replaced by one arriving from the
+ * other side — no animation, no state, and letting go brings it home because
+ * the rail's own settling does.
+ */
+const sideways = await page.evaluate(async () => {
+  const rail = document.getElementById("months");
+  /* Snapping is mandatory on this rail, so a scroll set from a script is put
+     straight back — which is the rail doing its job and this test measuring
+     around it. A thumb holds it wherever it likes. */
+  const snap = rail.style.scrollSnapType;
+  rail.style.scrollSnapType = "none";
+  rail.scrollLeft += 40;
+  await new Promise((r) => requestAnimationFrame(r));
+  await new Promise((r) => requestAnimationFrame(r));
+  const seen = {
+    drift: window.rayl.drift(),
+    /* The one in the middle — a card off the end of the arc is switched off and
+       its position is wherever it was left. */
+    x: window.rayl.wheel.cards[Math.round(window.rayl.at)].position.x,
+  };
+  rail.style.scrollSnapType = snap;
+  return seen;
+});
+check(
+  "dragging the months carries the cards sideways",
+  Math.abs(sideways.x) > 0.05 &&
+    Math.sign(sideways.x) === -Math.sign(sideways.drift),
+  `drifted ${sideways.drift.toFixed(2)} of a month, cards at x ${sideways.x.toFixed(2)}`,
 );
 
 await page.evaluate(() => {
-  const reel = document.getElementById("reel");
-  reel.scrollTop = reel.children[0].getBoundingClientRect().height * 3;
+  document
+    .getElementById("months")
+    .scrollBy({ left: -40, behavior: "instant" });
 });
-await wait(600);
-const inside = await page.evaluate(() => ({
-  curl: window.rayl.curl(),
-  chosen: Math.abs(
-    window.rayl.wheel.cards[Math.round(window.rayl.at)].position.y,
-  ),
-}));
+await wait(400);
 check(
-  "and inside the list it has curled, with the chosen card in the middle",
-  inside.curl > 0.9 && inside.chosen < 0.02,
-  `curl ${inside.curl.toFixed(2)}, chosen card at y ${inside.chosen.toFixed(3)}`,
+  "and letting go brings them back",
+  Math.abs(await page.evaluate(() => window.rayl.wheel.cards[0].position.x)) <
+    0.02,
+  `${(await page.evaluate(() => window.rayl.wheel.cards[0].position.x)).toFixed(3)}`,
 );
 
 /*
@@ -578,7 +717,13 @@ const walk = await page.evaluate(async () => {
     const edge = window.rayl.camera.top;
     window.rayl.wheel.cards.forEach((card, n) => {
       const y = card.position.y;
-      const showing = Math.abs(y) < edge;
+      /* On screen, which is not the same as inside the frame: the drum's own
+         radius is shorter than half the frame, so a card can be over the top of
+         it and coming down the far side without ever having been at an edge.
+         It is switched off up there, and what it does is the drum being a drum
+         rather than the list going anywhere. */
+      const showing =
+        card.visible && card.material.opacity > 0.02 && Math.abs(y) < edge;
       if (showing && was.has(n)) {
         seen++;
         if (y < was.get(n) - 1e-4) backwards++;
@@ -675,6 +820,74 @@ check(
   "a spin that stops between two cards is put on one",
   Math.abs(settled.at - Math.round(settled.at)) < 0.02 && settled.at > 1,
   `left at 2.5, came to rest at ${settled.at.toFixed(3)}`,
+);
+
+/*
+ * The months do not run out, in either direction.
+ *
+ * The run is built around today and grown a year at a time whenever the month
+ * being shown comes within two of an end, so there is always more of it both
+ * ways. Every index into the run moves when it grows, which is why the day is
+ * carried across by its date and not by its number.
+ */
+const forever = await page.evaluate(async () => {
+  const r = window.rayl;
+  const rail = document.getElementById("months");
+  const put = (at) =>
+    rail.scrollTo({
+      left:
+        r.rails.months.shape.first +
+        at * r.rails.months.shape.pitch +
+        r.rails.months.shape.wide / 2 -
+        rail.clientWidth / 2,
+      behavior: "instant",
+    });
+  const start = {
+    months: r.calendar.months.length,
+    label: r.calendar.months[r.rails.months.showing()].label,
+  };
+  /* Twenty months on, a month at a time, the way a thumb would. */
+  for (let i = 0; i < 20; i++) {
+    put(r.rails.months.showing() + 1);
+    await new Promise((res) => setTimeout(res, 30));
+  }
+  await new Promise((res) => setTimeout(res, 400));
+  const on = {
+    months: r.calendar.months.length,
+    label: r.calendar.months[r.rails.months.showing()].label,
+    date: r.calendar.days[r.chosen].date.getTime(),
+    day: r.calendar.days[r.chosen].date.getDate(),
+  };
+  /* And the same the other way, back past where it started. */
+  for (let i = 0; i < 30; i++) {
+    put(r.rails.months.showing() - 1);
+    await new Promise((res) => setTimeout(res, 30));
+  }
+  await new Promise((res) => setTimeout(res, 400));
+  const back = {
+    months: r.calendar.months.length,
+    label: r.calendar.months[r.rails.months.showing()].label,
+    date: r.calendar.days[r.chosen].date.getTime(),
+    day: r.calendar.days[r.chosen].date.getDate(),
+  };
+  return { start, on, back };
+});
+const monthsOn = new Date(forever.on.date);
+const monthsBack = new Date(forever.back.date);
+check(
+  "the months do not run out going forward",
+  forever.on.months > forever.start.months && monthsOn.getFullYear() >= 2027,
+  `${forever.start.months} months became ${forever.on.months}, twenty on from ${forever.start.label} at ${monthsOn.toDateString()}`,
+);
+check(
+  "and they do not run out going back",
+  forever.back.months > forever.on.months && monthsBack < monthsOn,
+  `${forever.back.months} months, ten back the other side of where it started at ${monthsBack.toDateString()}`,
+);
+check(
+  "and the day is carried across by its date",
+  forever.on.day === forever.back.day,
+  `the same day of the month either side of ${forever.back.months - forever.start.months} months of the run being rebuilt`,
 );
 
 /* ----------------------------------------------------------- the haptics --- */

@@ -99,6 +99,21 @@ days correct themselves to the same date in the month you asked for — and to i
 last day if it does not have one, since the 31st of a thirty-day month is not a
 reason to jump to the first.
 
+**The months do not run out.** The run is built around today and grown a year at
+a time whenever the month being shown comes within two of an end, so there is
+always more of it in both directions and no edge to arrive at. It is only ever
+grown, never trimmed: the day the screen is on is an index into this run, and an
+index that means one date now and another later is the kind of thing that goes
+wrong quietly — which is also why the day is carried across a rebuild by its
+date rather than by its number. Growing rebuilds both rows of cells, so it waits
+for a hand to come off them; a row rebuilt under a finger is a row that jumps.
+
+Which cell is in the middle is arithmetic rather than a search — where the first
+one starts, how far it is to the next, and where the middle of the rail has got
+to. It used to ask every cell where it was, which is a measurement each and a
+layout each, on every scroll event of every rail. That was survivable at six
+months and is not survivable at a hundred.
+
 Neither pushes back on the other, and the way that is arranged took two goes.
 
 The two things a rail does when it settles are told apart: what it is _for_
@@ -114,31 +129,26 @@ rota built, a tick rung, and the months dragged back by each — which is what
 "it bugs on" was. The suite crosses a month and fails if more than a day or two
 gets laid out.
 
-## The wheel opens out at the ends
+## Every rest is the same picture
 
-At rest the chosen card is the first one, so centring it leaves the top half of
-the frame empty — which reads as a list that has lost something rather than a
-list at its start.
+The card that is chosen is in the middle of the frame, wherever in the list it
+is. One faded card above it, one below, and at either end of the list one of
+those two is simply absent — a list that has ended looks like a list that has
+ended.
 
-So the wheel is not always the same wheel. At either end of a list it is nearly
-a straight line, leaning far enough up or down that the card at that end sits
-against the edge of the frame and the rest run away from it, filling the space.
-A card's worth of scrolling in, it has curled back to its own radius with the
-chosen one in the middle. Two numbers move — the radius and how far the whole
-wheel is slid up the frame — and both are eased over that first card.
+It used to open out. At either end the wheel flattened to nearly a straight line
+and leaned far enough up or down that the card at that end sat against the edge
+of the frame and the rest ran away from it, filling the space. That filled the
+first screen and cost every screen after it, because the lean is only spent two
+and a half cards in: every card chosen before that came to rest somewhere other
+than the middle — the picture pushed down, a gap above it, the card below pushed
+out of the frame — and near the end of a list the same thing the other way up.
+The middle is what is chosen, so the middle is where it goes, and the emptiness
+above the first card is what the top of a list is.
 
-The card under the ticks is the chosen one either way. What changes is where the
-ticks are looking.
-
-**It opens over two and a half cards, and that number is arithmetic.** While the
-wheel curls back up the lean is being let out, which moves every card _down_ the
-frame; scrolling moves them up, by one pitch per card. Let the lean out over a
-single card and it comes out at 0.83 of a card height against a pitch of 0.43 —
-so the first thing a flick did was send the list backwards, and only once the
-lean was spent did it start going the way the thumb asked. Over two and a half
-the steepest it can come out is 0.33 against that same 0.43, and the list only
-ever goes where it was pushed. The suite walks the reel through three cards in
-thirty steps and fails if a single one goes the wrong way.
+The suite stops at six places in a list, three of them inside it, and fails if
+the chosen card is anywhere but the middle or if the three cards on screen stand
+anywhere but where they stood at the last one.
 
 ## A month is a column
 
