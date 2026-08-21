@@ -1,0 +1,366 @@
+/*
+ * The screen, off node 800:5314.
+ *
+ * Every measurement here is the file's: 36 down either side, 65 above the mark,
+ * 36 between the mark, the calendar and the cards, 12 between the calendar's
+ * three rows and 6 between everything in one of them. Type is 12 at 0.24
+ * tracking and 1.2 leading, cap-trimmed like every text node in the design, and
+ * the two-pixel rules are 2 and rounded at whatever that row rounds them at —
+ * 33 in the months, 80 in the days and the distance, 59 in the tabs.
+ *
+ * What is not the file's: the phone's own corners, its notch and its home
+ * indicator, which the design draws because it is drawing a phone. This runs on
+ * one, so they are the device's and the safe areas are what is left.
+ */
+
+@font-face {
+  font-family: "Azeret";
+  src: url("/fonts/AzeretTRIAL-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-display: block;
+}
+@font-face {
+  font-family: "Azeret";
+  src: url("/fonts/AzeretTRIAL-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-display: block;
+}
+
+:root {
+  --ink: #eaeae5;
+  --black: #3f3f3b;
+  --green: #d8deb9;
+  --porcelain: #cecec5;
+  --paper-top: #696963;
+  --paper-bottom: #cecec5;
+  --font: "Azeret", ui-monospace, Menlo, monospace;
+
+  /* The content column, and the cells the three rails are cut into — all of
+     them what 330 comes to once the gaps and the rules are taken out. */
+  --column: 330px;
+  --month-cell: 95.333px;
+  --day-cell: 42px;
+  --distance-cell: 68px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--paper-top);
+  font-family: var(--font);
+  font-weight: 500;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+  /* Nothing here is a document: no selecting, no callout, no magnifier. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body,
+body * {
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
+}
+
+body.starting .screen {
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------ the screen --- */
+
+.screen {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: clip;
+  /*
+   * 65 above and 36 either side, straight off the file. Below it, the file
+   * pins the tabs at 805 of 874 and leaves 37 under them, which on a phone is
+   * about what the home indicator wants anyway — so it is that or the device's
+   * own inset, whichever is more.
+   */
+  padding: calc(env(safe-area-inset-top, 0px) + 65px) 36px
+    max(37px, calc(env(safe-area-inset-bottom, 0px) + 4px));
+  background: linear-gradient(
+    180deg,
+    var(--paper-top) 0.349%,
+    var(--paper-bottom) 100%
+  );
+  transition: opacity 0.25s ease;
+}
+
+/* -------------------------------------------------------------- the mark --- */
+
+.mark {
+  display: flex;
+  align-items: center;
+  gap: 6.25px;
+  width: 100%;
+  max-width: var(--column);
+  flex: none;
+}
+
+.mark .glyph {
+  display: block;
+  width: 18.75px;
+  height: 18.75px;
+}
+
+.mark .word {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* Drawn rather than set: the wordmark stays at the weight it was cut at
+   whatever the rest of the screen is doing. */
+.mark b {
+  font-weight: 400;
+  font-size: 26.786px;
+  line-height: 0.79;
+  letter-spacing: -1.0714px;
+  margin-right: -0.757px;
+  color: var(--ink);
+}
+
+.mark .reg {
+  display: block;
+  width: 3.94px;
+  height: 3.913px;
+}
+
+.mark .bell {
+  display: block;
+  width: 11.382px;
+  height: 12px;
+  margin-left: auto;
+}
+
+/* ---------------------------------------------------------- the calendar --- */
+
+.calendar {
+  /* 36 under the mark. */
+  margin-top: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: var(--column);
+  flex: none;
+}
+
+/*
+ * A rail is a row of the design laid on a scroller.
+ *
+ * The design draws each of these as cells that share the width; a rail keeps
+ * the width they came out at and lets the row run past it, which is the only
+ * difference between a picture of a week and a calendar. Snapping to the
+ * middle, because the middle is what is chosen.
+ */
+.rail {
+  /* Positioned, so a cell's offsetLeft is measured against the rail it is in
+     rather than against whatever happens to be positioned further up — which
+     is how putting a rail on a day landed it on the day after. */
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* Enough either side that the first and the last cell can reach the middle. */
+  padding-inline: calc(50% - var(--cell) / 2);
+  touch-action: pan-x;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.rail > .cell {
+  flex: none;
+  width: var(--cell);
+  scroll-snap-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0.24px;
+  white-space: nowrap;
+}
+
+/* The rules between cells: 2 across, the black, and the radius the row they
+   are in gives them. */
+.rail > .rule {
+  flex: none;
+  width: 2px;
+  background: var(--black);
+}
+
+.months {
+  --cell: var(--month-cell);
+}
+
+.months > .rule {
+  border-radius: 33px;
+}
+
+.distance {
+  --cell: var(--distance-cell);
+  align-items: center;
+}
+
+.distance > .rule {
+  height: 32px;
+  border-radius: 80px;
+}
+
+/* A day is a label, a rule and a date, six apart. */
+.days {
+  --cell: var(--day-cell);
+}
+
+.days > .cell {
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 4px;
+}
+
+.days .bar {
+  width: 100%;
+  height: 2px;
+  border-radius: 80px;
+  background: var(--black);
+}
+
+/* The one in the middle. The file draws it as the black block with the green
+   rule through it, and the green is the only place that colour appears. */
+.days > .cell[data-on="true"] {
+  background: var(--black);
+}
+
+.days > .cell[data-on="true"] .bar {
+  background: var(--green);
+  border-radius: 0;
+}
+
+/*
+ * And nothing else carries a state.
+ *
+ * The file gives the chosen day a black block with a green rule through it and
+ * gives the months, the distances and the tabs nothing at all — same colour,
+ * same weight, whichever one is in the middle. Dimming the others was mine and
+ * it is gone; if those rows want a chosen state it is a decision for the file
+ * to make, not for this to invent on the way past.
+ */
+
+/* ------------------------------------------------------------- the cards --- */
+
+.cards {
+  /* 36 under the calendar, and 33 above the tabs — the file has the tab bar at
+     805 with the column ending at 772. */
+  margin-top: 36px;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: var(--column);
+  overflow: clip;
+}
+
+#stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/*
+ * The scroller over the picture.
+ *
+ * Invisible, and the only thing being touched: a stop for every card and the
+ * phone's own scrolling between them. Everything a hand expects — the momentum,
+ * the rubber band at the ends, the way a flick decays — is in here and none of
+ * it can be written by hand as well as it already works.
+ */
+.reel {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.reel::-webkit-scrollbar {
+  display: none;
+}
+
+.reel > i {
+  display: block;
+  scroll-snap-align: center;
+}
+
+/* -------------------------------------------------------------- the tabs --- */
+
+.tabs {
+  margin-top: 33px;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  max-width: var(--column);
+  flex: none;
+}
+
+.tabs .rule {
+  flex: none;
+  width: 2px;
+  border-radius: 59px;
+  background: var(--black);
+}
+
+.tabs .tab {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0.24px;
+  color: var(--black);
+  white-space: nowrap;
+}

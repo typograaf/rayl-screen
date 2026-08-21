@@ -1,0 +1,21 @@
+# Formatting and the build, on anything pushed.
+#
+# Not the tests: they drive a real GPU through ANGLE, and half of what they
+# check is what a shader did — a runner with no graphics card would answer that
+# differently and slower. Those run on the machine the tool is built on, where
+# the answer means something.
+name: check
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prettier --check .
+      - run: npm run build
