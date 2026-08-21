@@ -130,6 +130,32 @@ wheel is slid up the frame — and both are eased over that first card.
 The card under the ticks is the chosen one either way. What changes is where the
 ticks are looking.
 
+**It opens over two and a half cards, and that number is arithmetic.** While the
+wheel curls back up the lean is being let out, which moves every card _down_ the
+frame; scrolling moves them up, by one pitch per card. Let the lean out over a
+single card and it comes out at 0.83 of a card height against a pitch of 0.43 —
+so the first thing a flick did was send the list backwards, and only once the
+lean was spent did it start going the way the thumb asked. Over two and a half
+the steepest it can come out is 0.33 against that same 0.43, and the list only
+ever goes where it was pushed. The suite walks the reel through three cards in
+thirty steps and fails if a single one goes the wrong way.
+
+## A month is a column
+
+Dragging the months carries the day's cards sideways with them, as though each
+month were a column with one on screen at a time.
+
+It needs no animation and no state. The offset is measured from the month being
+_shown_, so when the middle passes from one month to the next — which is the
+moment the day changes and the cards with it — the column that was leaving is
+suddenly measured from where it arrived, and comes in from the other side. Let
+go and the rail's own settling brings it home, because settling is what takes
+that measurement back to nothing.
+
+Only under a hand, though. The days push the months along too, and a column
+sliding out because the day it is showing has crossed into another month would
+be the screen answering a question nobody asked.
+
 ## The tick
 
 Safari has no Vibration API. `navigator.vibrate` is not on any iPhone and never

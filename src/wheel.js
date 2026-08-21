@@ -343,7 +343,17 @@ export class Wheel {
    * the same spacing is a flatter run of the same list, rather than the same
    * curve with the cards further apart.
    */
-  update({ radius, spacing, arc, fade, scroll, thickness, cycle, lean = 0 }) {
+  update({
+    radius,
+    spacing,
+    arc,
+    fade,
+    scroll,
+    thickness,
+    cycle,
+    lean = 0,
+    slide = 0,
+  }) {
     const R = Math.max(radius, 0.2) * CARD_HEIGHT;
     const step = (CARD_HEIGHT * (1 + spacing)) / R;
     const limit = arc * RADIANS;
@@ -366,11 +376,18 @@ export class Wheel {
         continue;
       }
       card.visible = true;
-      /* `lean` slides the whole wheel up or down the frame. At the ends of a
-         list it is what puts the first card at the top and the last at the
-         bottom, so the frame fills instead of showing one card in the middle of
-         nothing. */
-      card.position.set(0, R * Math.sin(theta) + lean, R * Math.cos(theta) - R);
+      /*
+       * `lean` slides the whole wheel up or down the frame — at the ends of a
+       * list it is what puts the first card at the top and the last at the
+       * bottom, so the frame fills instead of showing one card in the middle of
+       * nothing. `slide` does the same across it, which is how a month reads as
+       * a column: drag the months and the day's cards go with them.
+       */
+      card.position.set(
+        slide,
+        R * Math.sin(theta) + lean,
+        R * Math.cos(theta) - R,
+      );
       card.rotation.x = -theta;
       card.scale.z = thickness;
 

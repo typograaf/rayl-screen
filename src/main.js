@@ -71,6 +71,20 @@ const LOOK = {
  */
 const FLAT = 10;
 
+/*
+ * How much scrolling the wheel takes to curl back up, in cards.
+ *
+ * It has to be more than one, and the reason is arithmetic. While the wheel is
+ * opening back up the lean is being let out, which moves every card *down* the
+ * frame; scrolling moves them up, by one pitch per card. Let the lean out over
+ * a single card and it comes out at 0.83 of a card height against a pitch of
+ * 0.43 — so the first thing a flick does is send the list backwards, and only
+ * once the lean is spent does it start going the way the thumb asked. Over two
+ * and a half, the steepest the lean can come out is 0.33 against that same
+ * 0.43, and the list only ever goes where it was pushed.
+ */
+const OPEN = 2.5;
+
 const DISTANCES = ["<5km", "<20km", "<50km", "<100km", "Custom"];
 
 const canvas = document.getElementById("stage");
@@ -152,9 +166,9 @@ if (chosen < 0) chosen = 0;
  * What is on a day.
  *
  * Made from the date rather than kept anywhere, so a day looks the same every
- * time it is scrolled back to. Five to nine of them, which is what the design
- * has on screen at once: fewer than that and the wheel is a card in an empty
- * frame rather than a list you are somewhere in.
+ * time it is scrolled back to. Eight to fourteen of them: enough that the list
+ * runs past the frame in both directions once you are inside it, which is what
+ * a day of work looks like and what the wheel is for.
  */
 function shiftsOn(date) {
   let seed =
@@ -164,7 +178,7 @@ function shiftsOn(date) {
     return seed / 4294967296;
   };
   next();
-  const many = 5 + Math.floor(next() * 5);
+  const many = 8 + Math.floor(next() * 7);
   return Array.from({ length: many }, () => Math.floor(next() * CARD_COUNT));
 }
 
@@ -472,6 +486,9 @@ let at = 0;
  * made. The scrolling itself is still entirely the phone's.
  */
 let passing = 0;
+/* Where the months were last drawn from, so a rail being dragged sideways is a
+   reason to draw as much as the reel being dragged down is. */
+let slid = 0;
 
 /* --------------------------------------------------------------- the loop --- */
 
@@ -479,8 +496,36 @@ let passing = 0;
 function curl() {
   const span = Math.max(shifts.length - 1, 0);
   const edge = Math.min(at, span - at);
-  const t = Math.max(0, Math.min(edge, 1));
+  const t = Math.max(0, Math.min(edge / OPEN, 1));
   return t * t * (3 - 2 * t);
+}
+
+/*
+ * How far the months have been dragged from the one being shown, in months.
+ *
+ * The cards ride it sideways: a month is a column, and dragging the months
+ * carries the column with it. Which needs no animation and no state — when the
+ * middle passes from one month to the next, the day changes and this is
+ * suddenly measured from the new month instead, so the column that was leaving
+ * is replaced by one arriving from the other side. Let go, and the rail's own
+ * settling brings it home.
+ *
+ * Only under a hand. The days push the months along too, and a column sliding
+ * out because the day it is showing has crossed into another month would be
+ * the screen answering a question nobody asked.
+ */
+function drift() {
+  const found = rails.months;
+  if (!found || found.driven) return 0;
+  const cell = found.rail.querySelector(
+    `.cell[data-index="${found.showing()}"]`,
+  );
+  if (!cell) return 0;
+  const home =
+    cell.offsetLeft + cell.offsetWidth / 2 - found.rail.clientWidth / 2;
+  /* A month along is the cell plus the rule and the two gaps beside it. */
+  const step = cell.offsetWidth + 2 + 12;
+  return Math.max(-1.4, Math.min((found.rail.scrollLeft - home) / step, 1.4));
 }
 
 /** Half the frame less half a card, in the world's units: how far the wheel
@@ -511,6 +556,12 @@ function draw() {
     }
   }
 
+  const sideways = drift();
+  if (Math.abs(sideways - slid) > 1e-4) {
+    slid = sideways;
+    needs = true;
+  }
+
   if (!needs) return;
   needs = false;
   const open = curl();
@@ -524,6 +575,7 @@ function draw() {
     thickness: LOOK.depth,
     cycle: false,
     lean: (1 - open) * (at <= span / 2 ? room() : -room()),
+    slide: -slid / LOOK.fill,
   });
   renderer.render(scene, camera);
 }
@@ -591,6 +643,7 @@ window.rayl = {
     return built;
   },
   curl,
+  drift,
   get at() {
     return at;
   },

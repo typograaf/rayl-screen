@@ -369,7 +369,7 @@ check(
 );
 check(
   "a day's shifts come with the day",
-  later.shifts >= 3 && later.shifts <= 6,
+  later.shifts >= 8 && later.shifts <= 14,
   `${later.shifts} shifts`,
 );
 
@@ -396,13 +396,17 @@ check(
   `${step.toFixed(1)}px, against a card ${(393 - 72).toFixed(0)} wide`,
 );
 
+/* Three cards in, where the wheel has finished curling and the middle means
+   what it says — the opening out takes two and a half. */
 await page.evaluate((step) => {
-  document.getElementById("reel").scrollBy({ top: step, behavior: "instant" });
+  document
+    .getElementById("reel")
+    .scrollBy({ top: step * 3, behavior: "instant" });
 }, step);
 await wait(400);
 check(
   "scrolling the reel turns the wheel",
-  Math.abs((await shown()).at - 1) < 0.02,
+  Math.abs((await shown()).at - 3) < 0.05,
   `the wheel is at ${(await shown()).at.toFixed(3)}`,
 );
 
@@ -523,7 +527,7 @@ check(
 
 await page.evaluate(() => {
   const reel = document.getElementById("reel");
-  reel.scrollTop = reel.children[0].getBoundingClientRect().height * 2;
+  reel.scrollTop = reel.children[0].getBoundingClientRect().height * 3;
 });
 await wait(600);
 const inside = await page.evaluate(() => ({
@@ -536,6 +540,85 @@ check(
   "and inside the list it has curled, with the chosen card in the middle",
   inside.curl > 0.9 && inside.chosen < 0.02,
   `curl ${inside.curl.toFixed(2)}, chosen card at y ${inside.chosen.toFixed(3)}`,
+);
+
+/*
+ * And a flick only ever goes where it was pushed.
+ *
+ * While the wheel curls back up the lean is being let out, which moves every
+ * card down the frame, and scrolling moves them up. Let the lean out over one
+ * card and it comes out faster than the scrolling arrives — so the first thing
+ * a flick did was send the list backwards, and only once the lean was spent did
+ * it start going the way the thumb had asked. Over two and a half it cannot.
+ */
+const walk = await page.evaluate(async () => {
+  const reel = document.getElementById("reel");
+  const step = reel.children[0].getBoundingClientRect().height;
+  const frame = () => new Promise((r) => requestAnimationFrame(r));
+  reel.scrollTop = 0;
+  await frame();
+  await frame();
+  const ys = [];
+  for (let i = 0; i <= 30; i++) {
+    reel.scrollTop = (step * 3 * i) / 30;
+    await frame();
+    await frame();
+    ys.push(window.rayl.wheel.cards[0].position.y);
+  }
+  return ys;
+});
+const backwards = walk.filter((y, i) => i && y < walk[i - 1] - 1e-4).length;
+check(
+  "a flick only ever goes where it was pushed",
+  backwards === 0,
+  `${backwards} of ${walk.length - 1} steps went the wrong way`,
+);
+
+/*
+ * A month is a column, and dragging the months carries it sideways.
+ *
+ * Measured from the month being shown, so when the middle passes from one to
+ * the next the column that was leaving is replaced by one arriving from the
+ * other side — no animation, no state, and letting go brings it home because
+ * the rail's own settling does.
+ */
+const sideways = await page.evaluate(async () => {
+  const rail = document.getElementById("months");
+  /* Snapping is mandatory on this rail, so a scroll set from a script is put
+     straight back — which is the rail doing its job and this test measuring
+     around it. A thumb holds it wherever it likes. */
+  const snap = rail.style.scrollSnapType;
+  rail.style.scrollSnapType = "none";
+  rail.scrollLeft += 40;
+  await new Promise((r) => requestAnimationFrame(r));
+  await new Promise((r) => requestAnimationFrame(r));
+  const seen = {
+    drift: window.rayl.drift(),
+    /* The one in the middle — a card off the end of the arc is switched off and
+       its position is wherever it was left. */
+    x: window.rayl.wheel.cards[Math.round(window.rayl.at)].position.x,
+  };
+  rail.style.scrollSnapType = snap;
+  return seen;
+});
+check(
+  "dragging the months carries the cards sideways",
+  Math.abs(sideways.x) > 0.05 &&
+    Math.sign(sideways.x) === -Math.sign(sideways.drift),
+  `drifted ${sideways.drift.toFixed(2)} of a month, cards at x ${sideways.x.toFixed(2)}`,
+);
+
+await page.evaluate(() => {
+  document
+    .getElementById("months")
+    .scrollBy({ left: -40, behavior: "instant" });
+});
+await wait(400);
+check(
+  "and letting go brings them back",
+  Math.abs(await page.evaluate(() => window.rayl.wheel.cards[0].position.x)) <
+    0.02,
+  `${(await page.evaluate(() => window.rayl.wheel.cards[0].position.x)).toFixed(3)}`,
 );
 
 /* ----------------------------------------------------------- the haptics --- */
