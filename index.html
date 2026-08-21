@@ -51,12 +51,21 @@
       <section class="cards">
         <canvas id="stage"></canvas>
         <!--
-          The reel is what is actually scrolled: a native scroller with a stop
-          for every card, laid over the picture and invisible. Everything a
-          phone knows about scrolling — the rubber band, the momentum, the way a
-          flick decays — is in there and cannot be written by hand.
+          Two scrollers over the picture, one inside the other, both invisible.
+
+          The pager is three pages wide and always sits on the middle one: a
+          swipe across the cards turns the day and it goes back to the middle
+          without anybody seeing, which is how a day can be swiped through for
+          as long as there are days. The reel inside it is what is actually
+          scrolled up and down — a stop for every card. Everything a phone knows
+          about scrolling, in both directions, is in these two and none of it
+          can be written by hand.
         -->
-        <div class="reel" id="reel"></div>
+        <div class="pager" id="pager">
+          <div class="page"></div>
+          <div class="page"><div class="reel" id="reel"></div></div>
+          <div class="page"></div>
+        </div>
       </section>
 
       <nav class="tabs">

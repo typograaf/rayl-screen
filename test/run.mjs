@@ -889,6 +889,151 @@ check(
 );
 
 /*
+ * A day can be swiped through on the cards themselves.
+ *
+ * The pager is three pages wide and sits on the middle one, so a swipe across
+ * the cards is the phone's own scrolling and turns exactly one day. When it
+ * lands on a side page the day changes and it goes back to the middle in the
+ * same breath — which nobody sees, because at that moment the day going is a
+ * whole column off the screen and the day coming is dead centre, exactly where
+ * the day just chosen is about to be drawn.
+ */
+const swiped = await page.evaluate(async () => {
+  const r = window.rayl;
+  const pager = document.getElementById("pager");
+  const frame = () => new Promise((res) => requestAnimationFrame(res));
+  const day = () => r.calendar.days[r.chosen].date.getTime();
+  /* After the rails have finished with each other — a month put back is a day
+     put back, and it arrives a few frames later. */
+  await new Promise((res) => setTimeout(res, 700));
+  /* Snapping is mandatory on the pager, so a scroll set from a script is put
+     straight back — the pager doing its job, and this measuring around it. */
+  const snap = pager.style.scrollSnapType;
+  pager.style.scrollSnapType = "none";
+  pager.dispatchEvent(new Event("touchstart"));
+  const was = day();
+
+  pager.scrollLeft = pager.clientWidth * 1.5;
+  await frame();
+  await frame();
+  const half = {
+    here: r.wheel.cards[r.origin].position.x,
+    next: r.ghost.cards[0].position.x,
+    day: r.calendar.days[r.slidDay]?.getTime?.() ?? r.slidDay,
+  };
+
+  pager.scrollLeft = pager.clientWidth * 2;
+  pager.dispatchEvent(new Event("touchend"));
+  await frame();
+  await frame();
+  await frame();
+  const landed = {
+    day: day(),
+    middle: Math.abs(pager.scrollLeft - pager.clientWidth),
+    x: r.wheel.cards[r.origin].position.x,
+  };
+  pager.style.scrollSnapType = snap;
+  return { was, half, landed, aDay: 24 * 3600 * 1000 };
+});
+check(
+  "a swipe across the cards carries the day either side of it",
+  Math.abs(swiped.half.next - swiped.half.here - 1.113) < 0.02 &&
+    swiped.half.here < -0.4,
+  `half a page over, the day on screen is ${swiped.half.here.toFixed(2)} out and the next one is a card and a margin behind it`,
+);
+check(
+  "and landing on a page turns the day without anything moving",
+  Math.round((swiped.landed.day - swiped.was) / swiped.aDay) === 1 &&
+    swiped.landed.middle < 1 &&
+    Math.abs(swiped.landed.x) < 0.01,
+  `${Math.round((swiped.landed.day - swiped.was) / swiped.aDay)} day on, the pager ${swiped.landed.middle.toFixed(1)} off its middle page, and the column at ${swiped.landed.x.toFixed(3)}`,
+);
+
+/* And the days rail carries them the same way, because it is the same gesture:
+   a day is a column however it is asked for. */
+const dragged = await page.evaluate(async () => {
+  const r = window.rayl;
+  const rail = document.getElementById("days");
+  const frame = () => new Promise((res) => requestAnimationFrame(res));
+  await new Promise((res) => setTimeout(res, 600));
+  const snap = rail.style.scrollSnapType;
+  rail.style.scrollSnapType = "none";
+  rail.dispatchEvent(new Event("touchstart"));
+  rail.scrollLeft += r.rails.days.shape.pitch * 0.3;
+  await frame();
+  await frame();
+  const seen = {
+    drift: r.drift(),
+    x: r.wheel.cards[r.origin].position.x,
+    next: r.ghost.cards[0].position.x,
+  };
+  rail.scrollLeft -= r.rails.days.shape.pitch * 0.3;
+  rail.dispatchEvent(new Event("touchend"));
+  rail.style.scrollSnapType = snap;
+  await frame();
+  await frame();
+  return { seen, home: r.wheel.cards[r.origin].position.x };
+});
+check(
+  "dragging the days carries the columns as the months do",
+  dragged.seen.drift > 0.1 &&
+    Math.abs(dragged.seen.x + dragged.seen.drift * 1.113) < 0.02 &&
+    Math.abs(dragged.seen.next - dragged.seen.x - 1.113) < 0.02,
+  `a third of a day dragged put the column ${dragged.seen.x.toFixed(2)} over with the next day behind it`,
+);
+check(
+  "and letting go brings them back",
+  Math.abs(dragged.home) < 0.02,
+  `${dragged.home.toFixed(3)}`,
+);
+
+/*
+ * And the black block does not flash across the calendar on the way.
+ *
+ * An instant scroll moves a rail inside the call that asks for it and the event
+ * that says so arrives afterwards — so the frame in between had the rail on the
+ * new day and the block still on the old one, sitting off to one side of the
+ * row. Scrolling the months flashed it across the calendar and back on every
+ * month it passed.
+ */
+const block = await page.evaluate(async () => {
+  const r = window.rayl;
+  const rail = document.getElementById("months");
+  const frame = () => new Promise((res) => requestAnimationFrame(res));
+  const middle = () => {
+    const on = document.querySelector('.days .cell[data-on="true"]');
+    if (!on) return 999;
+    const box = on.getBoundingClientRect();
+    const row = document.getElementById("days").getBoundingClientRect();
+    return Math.abs(box.left + box.width / 2 - (row.left + row.width / 2));
+  };
+  let worst = 0;
+  for (let i = 0; i < 6; i++) {
+    const want = r.rails.months.showing() + 1;
+    rail.scrollTo({
+      left:
+        r.rails.months.shape.first +
+        want * r.rails.months.shape.pitch +
+        r.rails.months.shape.wide / 2 -
+        rail.clientWidth / 2,
+      behavior: "instant",
+    });
+    /* Read before anything is painted, which is the frame it used to be wrong
+       in. */
+    worst = Math.max(worst, middle());
+    await frame();
+    worst = Math.max(worst, middle());
+    await frame();
+  }
+  return worst;
+});
+check(
+  "the chosen day stays under the ticks while the months are scrolled",
+  block < 1,
+  `the black block never left the middle by more than ${block.toFixed(2)} of a point`,
+);
+
+/*
  * And a flick that dies between two cards is put on one.
  *
  * The stops are proximity rather than mandatory: mandatory snapping on iOS ends

@@ -352,6 +352,38 @@ body.starting .screen {
 }
 
 /*
+ * The pager: three pages of cards, sitting on the middle one.
+ *
+ * A swipe across the cards turns the day, and it is the phone's own scrolling
+ * that does it — mandatory snapping, so a swipe goes one day and not four, and
+ * the same momentum and rubber band as everything else here. When it lands on
+ * a side page the day changes and it is put back on the middle one instantly,
+ * so there is always another day either way.
+ */
+.pager {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pager::-webkit-scrollbar {
+  display: none;
+}
+
+.page {
+  position: relative;
+  flex: none;
+  width: 100%;
+  height: 100%;
+  scroll-snap-align: center;
+}
+
+/*
  * The scroller over the picture.
  *
  * Invisible, and the only thing being touched: a stop for every card and the
@@ -364,6 +396,16 @@ body.starting .screen {
   inset: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /*
+   * Both ways, and it has to be both.
+   *
+   * A touch is answered by the innermost scroller that can go the way it is
+   * being dragged, and what a scroller is allowed to answer is the narrowest
+   * of what it and everything above it declares. Say `pan-y` here and a
+   * sideways drag on the cards is nobody's — the reel cannot use it and the
+   * pager is no longer allowed to be asked.
+   */
+  touch-action: pan-x pan-y;
   /*
    * No snapping at all.
    *
@@ -378,7 +420,6 @@ body.starting .screen {
   scroll-snap-type: none;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
 }
 
 .reel::-webkit-scrollbar {

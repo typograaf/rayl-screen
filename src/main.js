@@ -94,6 +94,7 @@ const DISTANCES = ["<5km", "<20km", "<50km", "<100km", "Custom"];
 const canvas = document.getElementById("stage");
 const cards = document.querySelector(".cards");
 const reel = document.getElementById("reel");
+const pager = document.getElementById("pager");
 const tick = mountHaptics();
 
 /* ------------------------------------------------------------ the picture --- */
@@ -186,6 +187,8 @@ function resize() {
    * happens; only the buffer belongs to this.
    */
   renderer.setSize(width, height, false);
+  /* And the pager back on its middle page, which is where it lives. */
+  pager.scrollLeft = pager.clientWidth;
   frame();
   layReel();
   mark();
@@ -607,6 +610,17 @@ function railTo(name, index, behavior = "smooth") {
     behavior === "smooth" ? 600 : 80,
   );
   found.rail.scrollTo({ left, behavior });
+  /*
+   * And told where it is, now, rather than when the scroll event turns up.
+   *
+   * An instant scroll moves the rail inside this call and the event that says
+   * so arrives afterwards — so the frame in between had the rail on the new day
+   * and the black block still on the old one, sitting off to one side of the
+   * row. Scrolling the months flashed it across the calendar and back on every
+   * month it passed. The block is a cell's, so the cell has to be told in the
+   * same breath as the scroll.
+   */
+  if (behavior !== "smooth") found.settle();
 }
 
 /*
@@ -713,9 +727,30 @@ let at = 0;
  * made. The scrolling itself is still entirely the phone's.
  */
 let passing = 0;
-/* Where the months were last drawn from, so a rail being dragged sideways is a
-   reason to draw as much as the reel being dragged down is. */
+/* How far the columns were last drawn from home, and which day was next door —
+   so a rail being dragged sideways is a reason to draw as much as the reel
+   being dragged down is. */
 let slid = 0;
+let slidDay = -1;
+
+/* A hand on the cards themselves. */
+let pagerHeld = false;
+pager.addEventListener(
+  "touchstart",
+  () => {
+    pagerHeld = true;
+  },
+  { passive: true },
+);
+for (const done of ["touchend", "touchcancel"]) {
+  pager.addEventListener(
+    done,
+    () => {
+      pagerHeld = false;
+    },
+    { passive: true },
+  );
+}
 
 /*
  * And where a flick that has run out is put right.
@@ -753,32 +788,19 @@ for (const done of ["touchend", "touchcancel"]) {
 
 /* --------------------------------------------------------------- the loop --- */
 
-/*
- * How far the months have been dragged from the one being shown, in months.
- *
- * The cards ride it sideways: a month is a column, and dragging the months
- * carries the column with it. Which needs no animation and no state — when the
- * middle passes from one month to the next, the day changes and this is
- * suddenly measured from the new month instead, so the column that was leaving
- * is replaced by one arriving from the other side. Let go, and the rail's own
- * settling brings it home.
- *
- * Only under a hand. The days push the months along too, and a column sliding
- * out because the day it is showing has crossed into another month would be
- * the screen answering a question nobody asked.
- */
-function drift() {
-  const found = rails.months;
+/** How far a rail has been dragged from the cell it is showing, in cells. */
+function railDrift(name) {
+  const found = rails[name];
   if (!found || found.driven) return 0;
   const step = found.shape.pitch;
   if (!step) return 0;
   const off = (found.rail.scrollLeft - home(found, found.showing())) / step;
   /*
-   * And a rail that is as good as home is home.
+   * A rail that is as good as home is home.
    *
    * A snap does not always land on the exact pixel, and a rail resting a pixel
    * out is a column standing a few points off the side of the screen — which is
-   * a sliver of the month next door showing at the edge, at rest, for no reason
+   * a sliver of the day next door showing at the edge, at rest, for no reason
    * anybody could see. Under a hand this much is nothing.
    */
   if (Math.abs(off) < 0.004) return 0;
@@ -786,6 +808,50 @@ function drift() {
      column next door belongs to the gesture, not to the screen. */
   if (!found.held && performance.now() - found.moved > 500) return 0;
   return Math.max(-0.6, Math.min(off, 0.6));
+}
+
+/** How far the cards themselves have been swiped, in pages — a page being a
+    day, which is what the pager is three of. */
+function pageDrift() {
+  const wide = pager.clientWidth;
+  if (!wide) return 0;
+  const off = (pager.scrollLeft - wide) / wide;
+  return Math.abs(off) < 0.004 ? 0 : Math.max(-1, Math.min(off, 1));
+}
+
+/*
+ * How far the columns have been dragged, and which day is next door.
+ *
+ * A day is a column and there are three ways to drag one: sideways across the
+ * cards, along the days, or along the months. They are the same gesture as far
+ * as this is concerned — one of them at a time, because a rail that has been
+ * put somewhere by another rail says so and is not counted — and they all mean
+ * the same thing, which is that a day is on its way in from one side and the
+ * one on screen is on its way out the other.
+ *
+ * It needs no animation and no state. When the middle passes from one day to
+ * the next this is suddenly measured from the new one instead, so the column
+ * that was leaving is replaced by the one arriving at exactly the distance it
+ * had got to, and letting go brings it home because settling is what takes the
+ * measurement back to nothing.
+ */
+function drift() {
+  const swipe = pageDrift();
+  const days = railDrift("days");
+  const months = railDrift("months");
+  const off = swipe + days + months;
+  let next = -1;
+  if (swipe || days) {
+    next = chosen + Math.sign(swipe + days);
+  } else if (months) {
+    const where = rails.months.showing() + Math.sign(months);
+    next =
+      where < 0 || where >= calendar.months.length
+        ? -1
+        : dayInMonth(calendar, where, calendar.days[chosen].number);
+  }
+  if (!calendar.days[next]) next = -1;
+  return { off: Math.max(-1, Math.min(off, 1)), day: next };
 }
 
 /** Half the frame, in the world's units. */
@@ -843,24 +909,16 @@ function column() {
  */
 function nextDoor() {
   const way = Math.sign(slid);
-  const found = rails.months;
-  /* The month being moved towards — which after the changeover is the one just
-     left, so the two swap and neither of them moves. */
-  const month = found ? found.showing() + way : -1;
-  const day =
-    !way || !found || month < 0 || month >= calendar.months.length
-      ? -1
-      : dayInMonth(calendar, month, calendar.days[chosen].number);
-  if (day < 0) {
+  if (!way || slidDay < 0) {
     if (ghostDay !== -1) {
       ghost.hide();
       ghostDay = -1;
     }
     return;
   }
-  if (day !== ghostDay) {
-    ghostDay = day;
-    const run = runOf(day);
+  if (slidDay !== ghostDay) {
+    ghostDay = slidDay;
+    const run = runOf(slidDay);
     ghostOrigin = run.origin;
     ghost.setCount(run.run.length);
     ghost.setArt(run.run);
@@ -880,6 +938,31 @@ function nextDoor() {
     frame: half(),
     edge: feather(),
   });
+}
+
+/*
+ * And a page that has landed on one side or the other is a day turned.
+ *
+ * The pager is put back on its middle page in the same breath, which nobody
+ * sees: at the moment it lands, the day going is a whole column off the screen
+ * and the day coming is dead centre — exactly where the day that has just been
+ * chosen is about to be drawn. The two swap and nothing moves.
+ */
+function turnPage() {
+  const wide = pager.clientWidth;
+  if (!wide || pagerHeld) return;
+  const off = (pager.scrollLeft - wide) / wide;
+  if (Math.abs(off) < 0.98) return;
+  const want = chosen + Math.sign(off);
+  pager.scrollLeft = wide;
+  if (!calendar.days[want]) return;
+  tick();
+  /* The rails come with it, and the day is chosen by the same call that would
+     have chosen it had the day rail been dragged there by hand. */
+  railTo("days", want, "instant");
+  const month = calendar.days[want].month;
+  if (rails.months.showing() !== month) railTo("months", month);
+  stretch();
 }
 
 function draw() {
@@ -912,9 +995,11 @@ function draw() {
     }
   }
 
+  turnPage();
   const sideways = drift();
-  if (Math.abs(sideways - slid) > 1e-4) {
-    slid = sideways;
+  if (Math.abs(sideways.off - slid) > 1e-4 || sideways.day !== slidDay) {
+    slid = sideways.off;
+    slidDay = sideways.day;
     needs = true;
   }
 
@@ -1038,7 +1123,10 @@ window.rayl = {
   get built() {
     return built;
   },
-  drift,
+  drift: () => drift().off,
+  get slidDay() {
+    return slidDay;
+  },
   get at() {
     return at;
   },

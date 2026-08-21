@@ -181,7 +181,21 @@ Only under a hand, though. The days push the months along too, and a column
 sliding out because the day it is showing has crossed into another month would
 be the screen answering a question nobody asked.
 
-**A month is a column along**: a card and a margin, the same 36 that separates
+**A day is a column, and there are three ways to drag one**: sideways across the
+cards, along the days, or along the months. They are the same gesture as far as
+the picture is concerned — one at a time, because a rail that has been put
+somewhere by another rail says so and is not counted — and they all mean the
+same thing, which is that a day is on its way in from one side and the one on
+screen is on its way out the other.
+
+The cards themselves are swiped on a pager: three pages wide, sitting on the
+middle one, so a swipe is the phone's own scrolling with mandatory snapping and
+goes one day rather than four. When it lands on a side page the day changes and
+it goes back to the middle in the same breath, which nobody sees — at that
+moment the day going is a whole column off the screen and the day coming is dead
+centre, exactly where the day just chosen is about to be drawn.
+
+**A column along**: a card and a margin, the same 36 that separates
 everything else on this screen. Both columns are drawn — the one going and the
 one coming — because with only one of them on screen a drag showed a column
 leaving and then a screen of nothing until the next was suddenly the one being
@@ -211,6 +225,17 @@ window, and the renderer is told to keep its hands off the element's style: the
 sheet has the canvas at inset nought, which is right whatever else happens, and
 only the buffer belongs to the code. The suite moves 96 points of inset in after
 the fact and fails if the picture does not come with it.
+
+## The block does not flash
+
+The chosen day is a black block with a green rule through it, and it belongs to
+a cell. An instant scroll moves a rail inside the call that asks for it and the
+event that says so arrives afterwards — so the frame in between had the rail on
+the new day and the block still on the old one, sitting off to one side of the
+row: scrolling the months flashed it across the calendar and back on every month
+it passed. A rail is told where it is in the same breath as it is scrolled now,
+and the suite reads the block's position before anything is painted and fails if
+it is ever more than a point off the middle.
 
 ## Nothing is cut by an edge
 
