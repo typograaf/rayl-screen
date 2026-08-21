@@ -160,6 +160,10 @@ function pitch() {
   return (cardPx() / CARD_ASPECT) * (1 + LOOK.spacing);
 }
 
+/* The last shape the picture was laid out for, so a box that has not changed is
+   not a reason to lay it out again. */
+let laid = "";
+
 function resize() {
   cutCells();
   for (const name of Object.keys(rails)) {
@@ -171,7 +175,17 @@ function resize() {
   const width = cards.clientWidth;
   const height = cards.clientHeight;
   if (!width || !height) return;
-  renderer.setSize(width, height);
+  laid = `${width}x${height}`;
+  /*
+   * Without letting it write the canvas's style, which is the third argument.
+   *
+   * three sets `width` and `height` on the element as well as on the buffer,
+   * and an inline style beats the sheet — so the canvas stopped being the box
+   * it is supposed to fill and became whatever size it was the last time this
+   * ran. The sheet has it at inset nought, which is right whatever else
+   * happens; only the buffer belongs to this.
+   */
+  renderer.setSize(width, height, false);
   frame();
   layReel();
   mark();
@@ -784,6 +798,21 @@ function margin() {
   return MARGIN / (cardPx() || 1);
 }
 
+/**
+ * How far out a card fades over, in the world's units.
+ *
+ * Half a margin, and the reason it is not a whole one is that three cards to a
+ * frame is what this screen holds and three cards fill it to within a couple of
+ * points. Fade over a full margin and the two either side of the chosen one
+ * spend their whole lives inside it — a bright card between two whispers, on a
+ * screen that is supposed to look like a list. Over half, they read, and the
+ * fade still has to be spent by the time a card's own edge reaches the frame's,
+ * which is the only thing it is for.
+ */
+function feather() {
+  return MARGIN / 2 / (cardPx() || 1);
+}
+
 /** One column to the next: a card and the margin between them. */
 function column() {
   return 1 + margin();
@@ -844,7 +873,7 @@ function nextDoor() {
     cycle: false,
     slide: -slid * column() + way * column(),
     frame: half(),
-    edge: margin(),
+    edge: feather(),
   });
 }
 
@@ -905,7 +934,7 @@ function draw() {
      */
     slide: -slid * column(),
     frame: half(),
-    edge: margin(),
+    edge: feather(),
   });
   nextDoor();
   renderer.render(scene, camera);
@@ -944,6 +973,21 @@ async function start() {
     for (const name of Object.keys(rails)) rails[name].settle();
   });
 
+  /*
+   * The box is watched, not the window.
+   *
+   * A phone's safe areas do not arrive with the first layout — the web view
+   * lays out once with nothing at the top, and the inset turns up a moment
+   * later. Nothing about the window changed, so nothing said so: the column
+   * moved down by the notch and the picture stayed the size it had been, which
+   * is a wheel drawn half an inset lower than the frame it is supposed to be
+   * in, with that much of it cut off the bottom. Everything that has been read
+   * on this screen as sitting too low, or as the last card being clipped, was
+   * that.
+   */
+  new ResizeObserver(() => {
+    if (`${cards.clientWidth}x${cards.clientHeight}` !== laid) resize();
+  }).observe(cards);
   window.addEventListener("resize", resize);
   window.visualViewport?.addEventListener("resize", resize);
   requestAnimationFrame(draw);

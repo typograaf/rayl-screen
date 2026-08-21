@@ -607,6 +607,58 @@ check(
 );
 
 /*
+ * The picture is the box, whatever the box does afterwards.
+ *
+ * A phone's safe areas do not arrive with the first layout: the web view lays
+ * out once with nothing at the top and the inset turns up a moment later.
+ * Nothing about the window changed, so nothing said so — and three writes the
+ * canvas's size onto the element as well as onto its buffer, where an inline
+ * style beats the sheet. So the column moved down by the notch and the picture
+ * stayed the size it had been: a wheel drawn half an inset lower than the frame
+ * it is in, with that much of it cut off the bottom. Everything that read as
+ * sitting too low, or as the last card being clipped, was this.
+ */
+const late = await page.evaluate(async () => {
+  const screen = document.querySelector(".screen");
+  const canvas = document.getElementById("stage");
+  const look = () => {
+    const box = document.querySelector(".cards").getBoundingClientRect();
+    const seen = canvas.getBoundingClientRect();
+    return {
+      out: Math.abs(seen.top + seen.height / 2 - (box.top + box.height / 2)),
+      tall: Math.abs(seen.height - box.height),
+      /* The buffer is capped at two to the point, which is the renderer's own
+         limit and not a mismatch. */
+      buffer: Math.abs(
+        canvas.height / Math.min(devicePixelRatio, 2) - box.height,
+      ),
+    };
+  };
+  const before = look();
+  /* An inset arriving, which is what a phone does. */
+  screen.style.paddingTop = "120px";
+  await new Promise((r) => setTimeout(r, 400));
+  const after = look();
+  screen.style.paddingTop = "";
+  await new Promise((r) => setTimeout(r, 400));
+  return { before, after, back: look(), style: canvas.style.height };
+});
+check(
+  "the picture is the box it is drawn in",
+  late.before.out < 0.5 && late.before.tall < 0.5 && late.before.buffer < 1,
+  `middle out by ${late.before.out.toFixed(2)}, height by ${late.before.tall.toFixed(2)}, buffer by ${late.before.buffer.toFixed(2)}`,
+);
+check(
+  "and it still is when the notch arrives late",
+  late.after.out < 0.5 &&
+    late.after.tall < 0.5 &&
+    late.after.buffer < 1 &&
+    late.back.out < 0.5 &&
+    late.style === "",
+  `middle out by ${late.after.out.toFixed(2)}, height by ${late.after.tall.toFixed(2)}, buffer by ${late.after.buffer.toFixed(2)}, style "${late.style}"`,
+);
+
+/*
  * The picture is the screen's width and the cards on it are the column's.
  *
  * A column of cards that stops at the column's own edge is a column cut off 36

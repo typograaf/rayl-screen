@@ -195,6 +195,23 @@ The canvas runs to the edges of the screen for the same reason: a column that
 stopped at the column's own edge was cut off 36 points early, in mid-air, on a
 background that carries on past it.
 
+## The picture is the box
+
+A phone's safe areas do not arrive with the first layout. The web view lays out
+once with nothing at the top and the inset turns up a moment later — and nothing
+about the window changed, so nothing said so. three writes the canvas's size onto
+the element as well as onto its buffer, where an inline style beats the sheet, so
+the column moved down by the notch and the picture stayed the size it had been:
+a wheel drawn half an inset lower than the frame it is in, with that much of it
+cut off the bottom.
+
+Everything that read as sitting too low, or as the last card being clipped, was
+that — and none of it was the wheel. The box is watched now rather than the
+window, and the renderer is told to keep its hands off the element's style: the
+sheet has the canvas at inset nought, which is right whatever else happens, and
+only the buffer belongs to the code. The suite moves 96 points of inset in after
+the fact and fails if the picture does not come with it.
+
 ## Nothing is cut by an edge
 
 The drum's own fade is a card turning away. That is the whole story at its own
@@ -209,10 +226,13 @@ straight edge sawn through it. The fade is over the last **margin inside** the
 frame instead, and it is spent by the time the card's own edge arrives at the
 frame's. Nothing is ever cut because there is never anything there to cut.
 
-Which is why the ends of a list land a margin in rather than flush against the
-edge: a card that has landed sits exactly on the line the fade starts at, so it
-is whole, and one carrying on past it is gone before it can be cut. One number
-does both, and it is the design's own 36.
+It fades over **half** a margin, and the halving is not arbitrary either. Three
+cards to a frame is what this screen holds, and three cards fill it to within a
+couple of points — so a fade over a full margin is a fade the two either side of
+the chosen one spend their whole lives inside: a bright card between two
+whispers, on a screen that is supposed to look like a list. Over half, they
+read, and the fade is still spent by the time a card's own edge reaches the
+frame's, which is the only thing it is for.
 
 ## It can be spun
 
