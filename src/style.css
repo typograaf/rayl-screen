@@ -321,8 +321,20 @@ body.starting .screen {
  * ought to.
  */
 .cards {
-  /* 36 under the calendar, and 36 above the tabs. */
-  margin-top: 36px;
+  /*
+   * The picture takes the 36 above it and the 36 below it, and the layout does
+   * not move.
+   *
+   * The design's gaps are still there at rest — the card at the top of the
+   * frame stands a little over 36 clear of the calendar and the one at the
+   * bottom the same clear of the tabs — but they belong to the picture now
+   * rather than to the box, and that is the room the fade needs. Three cards to
+   * a frame is what this screen holds and three cards fill it to within a
+   * couple of points, so a picture cut to the box has its outer two hard
+   * against the edges with nowhere to fade: bright at rest and gone a few
+   * points later, which is a list that blinks rather than scrolls.
+   */
+  margin-top: 0;
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
@@ -380,7 +392,8 @@ body.starting .screen {
 /* -------------------------------------------------------------- the tabs --- */
 
 .tabs {
-  margin-top: 36px;
+  /* The 36 above these is the picture's now, and stands in the picture. */
+  margin-top: 0;
   display: flex;
   align-items: stretch;
   gap: 12px;

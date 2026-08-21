@@ -801,16 +801,21 @@ function margin() {
 /**
  * How far out a card fades over, in the world's units.
  *
- * Half a margin, and the reason it is not a whole one is that three cards to a
- * frame is what this screen holds and three cards fill it to within a couple of
- * points. Fade over a full margin and the two either side of the chosen one
- * spend their whole lives inside it — a bright card between two whispers, on a
- * screen that is supposed to look like a list. Over half, they read, and the
- * fade still has to be spent by the time a card's own edge reaches the frame's,
- * which is the only thing it is for.
+ * All the room there is, which is the distance between where the card next to
+ * the chosen one stands and the edge of the frame. Three cards to a frame is
+ * what this screen holds and three cards fill it to within a couple of points,
+ * so that distance is most of what decides whether the thing scrolls or blinks:
+ * cut to the box it is a few points and the outer cards go out like a light,
+ * and with the design's own gaps in the picture it is a third of a card and
+ * they go the way everything else on this screen goes.
+ *
+ * Worked out rather than chosen, so it is always as gentle as the frame allows.
  */
 function feather() {
-  return MARGIN / 2 / (cardPx() || 1);
+  const R = LOOK.radius * CARD_HEIGHT;
+  const step = (CARD_HEIGHT * (1 + LOOK.spacing)) / R;
+  const beside = R * Math.sin(step) + CARD_HEIGHT / 2;
+  return Math.max(half() - beside, MARGIN / 4 / (cardPx() || 1));
 }
 
 /** One column to the next: a card and the margin between them. */

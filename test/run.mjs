@@ -174,17 +174,52 @@ check(
 );
 
 const cards = await box(".cards");
-check(
-  "36 from the calendar to the cards",
-  near(cards.y - (calendar.y + calendar.height), 36),
-  `${(cards.y - calendar.y - calendar.height).toFixed(1)}`,
-);
-
 const tabs = await box("nav.tabs");
+
+/*
+ * The cards keep the file's 36 either side of them, and the box does not.
+ *
+ * The picture takes the gap above it and the gap below it, because that is the
+ * only room there is for a card to fade in: three cards to a frame is what this
+ * screen holds and three fill it to within a couple of points, so a picture cut
+ * to the box has its outer two hard against the edges and they go out like a
+ * light. Nothing moves for it. The card at the top of the frame stands where it
+ * always stood, which is the file's 36 and the head start the fade takes on top
+ * of it, and the one at the bottom stands the same distance off the tabs.
+ */
+const air = await page.evaluate(() => {
+  const box = document.querySelector(".cards").getBoundingClientRect();
+  const reel = document.getElementById("reel");
+  const view = window.rayl.camera;
+  const tall = box.height / (view.top - view.bottom);
+  /* A card's own height on screen: a stop in the reel less the air in it. */
+  const high = reel.children[0].getBoundingClientRect().height / 1.1;
+  const middle = box.top + box.height / 2;
+  const showing = window.rayl.wheel.cards
+    .filter((card) => card.visible && card.material.opacity > 0.5)
+    .map((card) => card.position.y);
+  return {
+    over:
+      middle -
+      Math.max(...showing) * tall -
+      high / 2 -
+      document.querySelector(".calendar").getBoundingClientRect().bottom,
+    under:
+      document.querySelector("nav.tabs").getBoundingClientRect().top -
+      (middle - Math.min(...showing) * tall + high / 2),
+    cards: showing.length,
+  };
+});
 check(
-  "36 from the cards to the tabs",
-  near(tabs.y - (cards.y + cards.height), 36),
-  `${(tabs.y - cards.y - cards.height).toFixed(1)}`,
+  "the cards stand clear of the calendar and the tabs",
+  air.over > 36 && air.under > 36 && Math.abs(air.over - air.under) < 1,
+  `${air.over.toFixed(1)} above and ${air.under.toFixed(1)} below, on the file's 36`,
+);
+check(
+  "and the box the picture is drawn in takes those gaps",
+  Math.abs(cards.y - (calendar.y + calendar.height)) < 0.5 &&
+    Math.abs(tabs.y - (cards.y + cards.height)) < 0.5,
+  `the picture runs from the calendar to the tabs, and the cards keep their air inside it`,
 );
 
 /*

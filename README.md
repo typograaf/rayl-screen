@@ -226,13 +226,20 @@ straight edge sawn through it. The fade is over the last **margin inside** the
 frame instead, and it is spent by the time the card's own edge arrives at the
 frame's. Nothing is ever cut because there is never anything there to cut.
 
-It fades over **half** a margin, and the halving is not arbitrary either. Three
-cards to a frame is what this screen holds, and three cards fill it to within a
-couple of points — so a fade over a full margin is a fade the two either side of
-the chosen one spend their whole lives inside: a bright card between two
-whispers, on a screen that is supposed to look like a list. Over half, they
-read, and the fade is still spent by the time a card's own edge reaches the
-frame's, which is the only thing it is for.
+**How far it fades over is all the room there is**, and finding that room is the
+whole problem. Three cards to a frame is what this screen holds and three cards
+fill it to within a couple of points, so a picture cut to its own box has the
+outer two hard against the edges with nowhere to fade in: bright at rest and
+gone a few points later, which is a list that blinks rather than scrolls.
+
+So the picture takes the 36 above it and the 36 below it. Nothing moves for it —
+the cards stand exactly where they stood, the file's 36 clear of the calendar
+and of the tabs with the fade's own head start on top — but those gaps belong to
+the picture now instead of to the box, and a card fades over a third of its own
+height rather than over a few points. The distance is worked out from where the
+card beside the chosen one stands, so it is always as gentle as the frame
+allows, and it is still spent by the time a card's own edge reaches the frame's,
+which is the only thing it is for.
 
 ## It can be spun
 
