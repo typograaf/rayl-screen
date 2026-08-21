@@ -19,13 +19,69 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 /* The design's card: 330 by 128, which the model matches to a tenth of a per
    cent. Kept here because the print is laid out in those units. */
-export const CARD_ASPECT = 330 / 128;
+export const CARD_WIDE = 330;
+export const CARD_TALL = 128;
+export const CARD_ASPECT = CARD_WIDE / CARD_TALL;
 
 let base = null;
 
 /** The card geometry, standing up, centred, one unit across. */
 export function cardGeometry() {
   return base;
+}
+
+const shaped = new Map();
+
+/**
+ * The same card at another height.
+ *
+ * The design cuts a card to its contents — an icon two points shorter makes a
+ * card two points shorter, a third line of title makes it eighteen taller — so
+ * there is no such thing as the card's height, only this card's. One model
+ * still, stretched: everything above the middle moves up and everything below
+ * moves down, which leaves the corners and the bevel exactly the shape they
+ * were modelled and stretches only the straight run between them. Scaling in y
+ * would have turned every corner into an oval and the bevel with it.
+ *
+ * Then the mapping is laid on again, because it is planar and worked out from
+ * where the vertices are: put back after the stretch it is right for the new
+ * height, and left alone it would have squeezed the print into the middle band
+ * along with the geometry.
+ *
+ * Cached on the height. A day of shifts is a dozen cards and two or three
+ * heights between them, and a geometry per card is a geometry per card to
+ * upload.
+ */
+export function cardFor(tall) {
+  const key = tall.toFixed(5);
+  const known = shaped.get(key);
+  if (known) return known;
+  if (!base) return null;
+
+  const geometry = base.clone();
+  /*
+   * Measured off the model rather than off the design's number.
+   *
+   * The model matches the design to a tenth of a per cent, which on 128 is a
+   * point — and a point of card that every stretched card would have inherited,
+   * since a stretch is the difference between where it is and where it should
+   * be. Taken from the model's own height it comes out exactly what was asked
+   * for, the file's own card included.
+   */
+  const grow = tall - (base.boundingBox.max.y - base.boundingBox.min.y);
+  if (Math.abs(grow) > 1e-6) {
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+      const y = position.getY(i);
+      if (y > 1e-6) position.setY(i, y + grow / 2);
+      else if (y < -1e-6) position.setY(i, y - grow / 2);
+    }
+    position.needsUpdate = true;
+  }
+  geometry.computeBoundingBox();
+  paint(geometry);
+  shaped.set(key, geometry);
+  return geometry;
 }
 
 /**

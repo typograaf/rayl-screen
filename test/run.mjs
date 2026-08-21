@@ -193,7 +193,7 @@ const air = await page.evaluate(() => {
   const view = window.rayl.camera;
   const tall = box.height / (view.top - view.bottom);
   /* A card's own height on screen: a stop in the reel less the air in it. */
-  const high = reel.children[0].getBoundingClientRect().height / 1.1;
+  const high = (window.rayl.LOOK.fill * 321) / 2.5776;
   const middle = box.top + box.height / 2;
   const showing = window.rayl.wheel.cards
     .filter((card) => card.visible && card.material.opacity > 0.5)
@@ -212,8 +212,8 @@ const air = await page.evaluate(() => {
 });
 check(
   "the cards stand clear of the calendar and the tabs",
-  air.over > 36 && air.under > 36 && Math.abs(air.over - air.under) < 1,
-  `${air.over.toFixed(1)} above and ${air.under.toFixed(1)} below, on the file's 36`,
+  air.over > 36 && air.under > 36,
+  `${air.over.toFixed(1)} above and ${air.under.toFixed(1)} below, on the file's 36 — and not the same, because the card above and the card below are not the same card`,
 );
 check(
   "and the box the picture is drawn in takes those gaps",
@@ -422,27 +422,51 @@ check(
 
 /* ------------------------------------------------------------- the cards --- */
 
-const step = await page.evaluate(
-  () => document.querySelector("#reel > i").getBoundingClientRect().height,
+/*
+ * The reel is as long as the run of cards is round the drum.
+ *
+ * Which is not a card times a count any more: the design cuts each card to what
+ * is on it, so the distance from one to the next is half of each of them and
+ * the air between, and the reel is laid out from the same running total the
+ * drum is. Every stop is a different height and their sum is the travel.
+ */
+const reel = await page.evaluate(() => {
+  const stops = [...document.querySelectorAll("#reel > i")].map(
+    (one) => one.getBoundingClientRect().height,
+  );
+  return {
+    stops,
+    sum: stops.reduce((a, b) => a + b, 0),
+    travel: window.rayl.travel(),
+    range:
+      document.getElementById("reel").scrollHeight -
+      document.getElementById("reel").clientHeight,
+    cards: window.rayl.shifts.length,
+    heights: window.rayl.wheel.tall.map((t) => Math.round(t * 330)),
+  };
+});
+check(
+  "the reel is as long as the run of cards is round the drum",
+  reel.stops.length === reel.cards - 1 &&
+    Math.abs(reel.sum - reel.travel) < 1 &&
+    Math.abs(reel.range - reel.travel) < 1.5,
+  `${reel.cards} cards, ${reel.stops.length} stops summing to ${reel.sum.toFixed(0)} against a scroll of ${reel.range}`,
 );
 check(
-  "a stop in the reel is a card on screen",
-  step > 60 && step < 300,
-  `${step.toFixed(1)}px, against a card ${(393 - 72).toFixed(0)} wide`,
+  "and the cards on it are not all one height",
+  new Set(reel.heights).size > 1 && reel.heights.includes(128),
+  `the day carries ${[...new Set(reel.heights)].sort((a, b) => a - b).join(", ")} in the design's units, the file's own card among them`,
 );
 
-/* Three cards in, where the wheel has finished curling and the middle means
-   what it says — the opening out takes two and a half. */
-await page.evaluate((step) => {
-  document
-    .getElementById("reel")
-    .scrollBy({ top: step * 3, behavior: "instant" });
-}, step);
+/* Three cards in, where the middle means what it says. */
+await page.evaluate(() => {
+  document.getElementById("reel").scrollTop = window.rayl.stopFor(3);
+});
 await wait(400);
 check(
   "scrolling the reel turns the wheel",
-  Math.abs((await shown()).at - 3) < 0.05,
-  `the wheel is at ${(await shown()).at.toFixed(3)}`,
+  (await page.evaluate(() => window.rayl.on())) === 3,
+  `the wheel is on card ${await page.evaluate(() => window.rayl.on())}`,
 );
 
 /* The middle is the selection, which is the whole arrangement: whichever card
@@ -460,7 +484,7 @@ const middle = await page.evaluate(() => {
      the day before's. */
   return {
     nearest: near[0].index - window.rayl.origin,
-    stoppedOn: Math.round(window.rayl.at),
+    stoppedOn: window.rayl.on(),
   };
 });
 check(
@@ -480,7 +504,8 @@ check(
  */
 const flick = await page.evaluate(async () => {
   const reel = document.getElementById("reel");
-  const step = reel.children[0].getBoundingClientRect().height;
+  const step =
+    window.rayl.travel() / Math.max(window.rayl.shifts.length - 1, 1);
   let programs = window.rayl.renderer.info.programs.length;
   let recompiles = 0;
   const times = [];
@@ -551,13 +576,12 @@ check(
  */
 const rests = await page.evaluate(async () => {
   const reel = document.getElementById("reel");
-  const step = reel.children[0].getBoundingClientRect().height;
-  const stops = reel.children.length - 1;
+  const stops = window.rayl.shifts.length - 1;
   const frame = () => new Promise((r) => requestAnimationFrame(r));
   reel.dispatchEvent(new Event("touchstart"));
   const seen = [];
   for (const on of [0, 1, 2, Math.floor(stops / 2), stops - 1, stops]) {
-    reel.scrollTop = step * on;
+    reel.scrollTop = window.rayl.stopFor(on);
     await frame();
     await frame();
     seen.push({
@@ -581,24 +605,116 @@ check(
 );
 
 /*
- * And every rest is the same picture — the ends of the list included.
+ * And every rest holds a full frame — the ends of the list included.
  *
- * Three cards in the same three places, whichever card is chosen. The frame
- * holds about three and a list has to fill it at its own ends too, where there
- * is nothing above the first card and nothing below the last. It is a rota,
- * though, and there is no such thing as nothing above the first shift of a day:
- * there is the last shift of the day before, and the drum carries two of those
- * at either end.
+ * Three cards, wherever it stops, which at the ends of a list means the day
+ * before and the day after: a rota has no such thing as nothing above the first
+ * shift of a day, and the drum carries two of the day before's at either end.
+ *
+ * What it cannot be any more is the same three places every time. The design
+ * cuts a card to what is on it, so a rest with a three-line card above the
+ * chosen one stands differently from a rest with a short one — and should. What
+ * has to hold is that the frame is full and the chosen card is in the middle of
+ * it.
  */
-const spread = Math.max(
-  ...rests.flatMap((r) =>
-    r.showing.map((y, i) => Math.abs(y - rests[0].showing[i])),
-  ),
+check(
+  "and every rest holds a full frame, the ends of the list included",
+  rests.every((r) => r.showing.length === 3),
+  `${rests.map((r) => r.showing.length).join(", ")} cards at six rests through a list, both ends among them`,
+);
+
+/*
+ * A card is cut to what is on it.
+ *
+ * Which is what the design does — an icon two points shorter makes a card two
+ * points shorter, a third line of title makes it eighteen taller — and what
+ * this used to fake by centring every block in one height. The one card the
+ * file gives a height for still comes out at the file's 128, because the air
+ * above and below the block is worked back out of that card and every other one
+ * is given the same.
+ */
+const shapes = await page.evaluate(() => {
+  const heights = window.rayl.CARD_SIZES;
+  const air = heights.map((tall, i) => tall - window.rayl.CARD_BLOCKS[i]);
+  const geometry = window.rayl.wheel.cards.map((card, i) => {
+    const box = card.geometry.boundingBox;
+    return {
+      tall: box.max.y - box.min.y,
+      wide: box.max.x - box.min.x,
+      want: window.rayl.wheel.tall[i],
+    };
+  });
+  /* The corners are translated, not scaled: the distances from the top edge to
+     every vertex in the corner band are the same shape on a tall card as on a
+     short one. */
+  const bandOf = (card) => {
+    const box = card.geometry.boundingBox;
+    const y = card.geometry.attributes.position;
+    const band = [];
+    for (let i = 0; i < y.count; i++) {
+      const away = box.max.y - y.getY(i);
+      if (away < 24 / 330 + 1e-6) band.push(+away.toFixed(4));
+    }
+    return [...new Set(band)].sort((a, b) => a - b);
+  };
+  const talls = window.rayl.wheel.tall;
+  const short = window.rayl.wheel.cards[talls.indexOf(Math.min(...talls))];
+  const tall = window.rayl.wheel.cards[talls.indexOf(Math.max(...talls))];
+  /* And the mapping is planar, so the print is laid across the card rather than
+     stretched with the middle of it. */
+  const planar = window.rayl.wheel.cards.every((card) => {
+    const box = card.geometry.boundingBox;
+    const position = card.geometry.attributes.position;
+    const uv = card.geometry.attributes.uv;
+    const high = box.max.y - box.min.y;
+    for (let i = 0; i < position.count; i += 7) {
+      const want = (position.getY(i) - box.min.y) / high;
+      if (Math.abs(uv.getY(i) - want) > 1e-5) return false;
+    }
+    return true;
+  });
+  return {
+    heights,
+    air,
+    geometry,
+    corners: [bandOf(short), bandOf(tall)],
+    planar,
+  };
+});
+check(
+  "the file's own card is the file's own height",
+  shapes.heights[2] === 128 && new Set(shapes.heights).size > 2,
+  `the six come out ${shapes.heights.join(", ")}, the file's third among them at 128`,
 );
 check(
-  "and every rest is the same picture, the ends of the list included",
-  rests.every((r) => r.showing.length === 3) && spread < 0.005,
-  `all ${rests.length} rests hold three cards, within ${(spread * 1000).toFixed(1)} thousandths of each other`,
+  "and every other one is its own contents and the same air",
+  shapes.air.every((one) => Math.abs(one - shapes.air[2]) < 0.51) &&
+    shapes.heights.some(
+      (tall) => shapes.heights.includes(tall + 18) || tall === 146,
+    ),
+  `${(shapes.air[2] / 2).toFixed(2)} of air above the block and the same below it on all six, and a third line of title is the 18 the type is set at`,
+);
+check(
+  "the model is stretched to each of them",
+  shapes.geometry.every(
+    (one) =>
+      Math.abs(one.tall - one.want) < 0.002 && Math.abs(one.wide - 1) < 0.002,
+  ),
+  `${new Set(shapes.geometry.map((one) => Math.round(one.tall * 330))).size} heights of card on the drum, every one of them a card wide`,
+);
+check(
+  "and stretched between its corners, not through them",
+  shapes.corners[0].length > 3 &&
+    shapes.corners[0].length === shapes.corners[1].length &&
+    shapes.corners[0].every(
+      (away, i) => Math.abs(away - shapes.corners[1][i]) < 0.0002,
+    ),
+  `${shapes.corners[0].length} rows of vertices in the corner, standing at the same depths on the shortest card and the tallest`,
+);
+check(
+  "and the print is laid across it rather than stretched with it",
+  shapes.planar,
+  `every card's mapping is where its vertices are`,
 );
 
 /*
@@ -613,22 +729,22 @@ check(
  */
 const cut = await page.evaluate(async () => {
   const reel = document.getElementById("reel");
-  const step = reel.children[0].getBoundingClientRect().height;
   const frame = () => new Promise((r) => requestAnimationFrame(r));
-  const stops = reel.children.length - 1;
+  const stops = window.rayl.shifts.length - 1;
   reel.dispatchEvent(new Event("touchstart"));
   let worst = -Infinity;
   for (let i = 0; i <= 40; i++) {
-    reel.scrollTop = (step * stops * i) / 40;
+    reel.scrollTop = (window.rayl.travel() * i) / 40;
     await frame();
     await frame();
     const edge = window.rayl.camera.top;
-    const tall = 1 / 2.5776; /* CARD_HEIGHT, near enough for a bound */
-    for (const card of window.rayl.wheel.cards) {
-      if (!card.visible || card.material.opacity <= 0.02) continue;
+    window.rayl.wheel.cards.forEach((card, i) => {
+      if (!card.visible || card.material.opacity <= 0.02) return;
+      /* Its own height: they are not all one card any more. */
+      const tall = window.rayl.wheel.tall[i];
       const out = (Math.abs(card.position.y) + tall / 2 - edge) / tall;
       if (out > worst) worst = out;
-    }
+    });
   }
   reel.dispatchEvent(new Event("touchend"));
   return { worst };
@@ -744,8 +860,8 @@ const sideways = await page.evaluate(async () => {
     drift: window.rayl.drift(),
     /* The one in the middle — a card off the end of the arc is switched off and
        its position is wherever it was left. */
-    x: window.rayl.wheel.cards[window.rayl.origin + Math.round(window.rayl.at)]
-      .position.x,
+    x: window.rayl.wheel.cards[window.rayl.origin + window.rayl.on()].position
+      .x,
   };
   rail.style.scrollSnapType = snap;
   return seen;
@@ -765,9 +881,12 @@ await page.evaluate(() => {
 await wait(400);
 check(
   "and letting go brings them back",
-  Math.abs(await page.evaluate(() => window.rayl.wheel.cards[0].position.x)) <
-    0.02,
-  `${(await page.evaluate(() => window.rayl.wheel.cards[0].position.x)).toFixed(3)}`,
+  Math.abs(
+    await page.evaluate(
+      () => window.rayl.wheel.cards[window.rayl.origin].position.x,
+    ),
+  ) < 0.02,
+  `${(await page.evaluate(() => window.rayl.wheel.cards[window.rayl.origin].position.x)).toFixed(3)}`,
 );
 
 /*
@@ -787,7 +906,6 @@ check(
  */
 const walk = await page.evaluate(async () => {
   const reel = document.getElementById("reel");
-  const step = reel.children[0].getBoundingClientRect().height;
   const frame = () => new Promise((r) => requestAnimationFrame(r));
   /* Held, as a thumb would hold it: a scroller stepped by a script sits still
      between steps, and a scroller sitting still with nobody on it is one the
@@ -800,7 +918,7 @@ const walk = await page.evaluate(async () => {
   let backwards = 0;
   let seen = 0;
   for (let i = 0; i <= 30; i++) {
-    reel.scrollTop = (step * 3 * i) / 30;
+    reel.scrollTop = (window.rayl.stopFor(3) * i) / 30;
     await frame();
     await frame();
     const edge = window.rayl.camera.top;
@@ -848,10 +966,9 @@ const paged = await page.evaluate(async () => {
   const frame = () => new Promise((r) => requestAnimationFrame(r));
   const home = rail.scrollLeft;
   const look = () => ({
-    here: window.rayl.wheel.cards[
-      window.rayl.origin + Math.round(window.rayl.at)
-    ].position.x,
-    next: window.rayl.ghost.cards[0].position.x,
+    here: window.rayl.wheel.cards[window.rayl.origin + window.rayl.on()]
+      .position.x,
+    next: window.rayl.ghost.cards[window.rayl.ghostOrigin].position.x,
     day: window.rayl.chosen,
   });
 
@@ -918,7 +1035,7 @@ const swiped = await page.evaluate(async () => {
   await frame();
   const half = {
     here: r.wheel.cards[r.origin].position.x,
-    next: r.ghost.cards[0].position.x,
+    next: r.ghost.cards[r.ghostOrigin].position.x,
     day: r.calendar.days[r.slidDay]?.getTime?.() ?? r.slidDay,
   };
 
@@ -965,7 +1082,7 @@ const dragged = await page.evaluate(async () => {
   const seen = {
     drift: r.drift(),
     x: r.wheel.cards[r.origin].position.x,
-    next: r.ghost.cards[0].position.x,
+    next: r.ghost.cards[r.ghostOrigin].position.x,
   };
   rail.scrollLeft -= r.rails.days.shape.pitch * 0.3;
   rail.dispatchEvent(new Event("touchend"));
@@ -1125,18 +1242,22 @@ check(
  */
 const settled = await page.evaluate(async () => {
   const reel = document.getElementById("reel");
-  const step = reel.children[0].getBoundingClientRect().height;
   /* After the rails have finished with each other: a month put back is a day
      put back, and a day put back opens its list at the top. */
   await new Promise((r) => setTimeout(r, 700));
-  reel.scrollTop = step * 2.5;
+  /* Half way between the second card and the third, which is nowhere. */
+  reel.scrollTop = (window.rayl.stopFor(2) + window.rayl.stopFor(3)) / 2;
   await new Promise((r) => setTimeout(r, 900));
-  return { at: window.rayl.at };
+  return {
+    on: window.rayl.on(),
+    /* Both in pixels of scroll, which is what the reel is in. */
+    off: Math.abs(reel.scrollTop - window.rayl.stopFor(window.rayl.on())),
+  };
 });
 check(
   "a spin that stops between two cards is put on one",
-  Math.abs(settled.at - Math.round(settled.at)) < 0.02 && settled.at > 1,
-  `left at 2.5, came to rest at ${settled.at.toFixed(3)}`,
+  settled.off < 1 && settled.on > 1,
+  `left between two cards, came to rest on one of them ${settled.off.toFixed(2)} points off its middle`,
 );
 
 /*

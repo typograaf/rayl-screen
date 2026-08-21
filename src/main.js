@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { loadCard, CARD_ASPECT } from "./card.js";
-import { cardAtlas, CARD_COUNT } from "./cardart.js";
+import { cardAtlas, CARD_COUNT, cardHeight, cardBlocks } from "./cardart.js";
 import { Wheel, CARD_HEIGHT } from "./wheel.js";
 import { Lighting } from "./environment.js";
 import { buildCalendar, dayInMonth } from "./calendar.js";
@@ -155,10 +155,22 @@ function frame() {
   camera.updateProjectionMatrix();
 }
 
-/** How far apart two cards are on screen, which is what a stop in the reel is
-    worth: the card's own height at this size, plus the air between them. */
+/** How far apart the file's own two cards would be on screen — what a card was
+    worth when they were all one height, and still what the fade is measured
+    against. */
 function pitch() {
   return (cardPx() / CARD_ASPECT) * (1 + LOOK.spacing);
+}
+
+/** Where a card of the day's run sits on the drum, in pixels of scroll. */
+function stopFor(i) {
+  if (!wheel) return 0;
+  return (wheel.placeOf(origin + i) - wheel.placeOf(origin)) * cardPx();
+}
+
+/** How far the day's run goes, in pixels of scroll. */
+function travel() {
+  return stopFor(Math.max(shifts.length - 1, 0));
 }
 
 /* The last shape the picture was laid out for, so a box that has not changed is
@@ -316,13 +328,21 @@ let origin = 0;
    a month arrived in one move or walked there. */
 let built = 0;
 
-/** The reel gets a stop for every card, and enough air either side that the
-    first and the last can reach the middle. */
+/*
+ * The reel is as long as the run of cards is round the drum.
+ *
+ * A stop is the distance from one card to the next, which is half of each of
+ * them and the air between — so the stops are not all the same height any more
+ * and neither is what a card is worth. Half the frame either side, so nought
+ * puts the first card in the middle and the end puts the last one there.
+ */
 function layReel() {
-  const step = pitch();
-  const pad = Math.max((reel.clientHeight - step) / 2, 0);
+  const pad = reel.clientHeight / 2;
   reel.style.paddingBlock = `${pad}px`;
-  for (const stop of reel.children) stop.style.height = `${step}px`;
+  const stops = [...reel.children];
+  for (let i = 0; i < stops.length; i++) {
+    stops[i].style.height = `${Math.max(stopFor(i + 1) - stopFor(i), 0)}px`;
+  }
 }
 
 /** A day's shifts, with the tail of the day before and the head of the day
@@ -347,10 +367,14 @@ function showDay(index, { jump = true } = {}) {
   origin = day.origin;
 
   wheel.setCount(day.run.length);
-  wheel.setArt(day.run);
+  wheel.setArt(day.run, LOOK.spacing);
   pushSurface();
 
-  reel.replaceChildren(...shifts.map(() => document.createElement("i")));
+  /* One fewer than the cards: a stop is the gap between two of them, and the
+     half-frame of padding is what lets the last one reach the middle. */
+  reel.replaceChildren(
+    ...shifts.slice(1).map(() => document.createElement("i")),
+  );
   layReel();
   if (jump) {
     reel.scrollTop = 0;
@@ -811,6 +835,18 @@ for (const done of ["touchend", "touchcancel"]) {
   );
 }
 
+/** Which of the day's cards is nearest the middle. */
+function on() {
+  if (!wheel) return 0;
+  return Math.max(
+    0,
+    Math.min(
+      wheel.nearest(wheel.placeOf(origin) + at) - origin,
+      Math.max(shifts.length - 1, 0),
+    ),
+  );
+}
+
 /* --------------------------------------------------------------- the loop --- */
 
 /** How far a rail has been dragged from the cell it is showing, in cells. */
@@ -958,19 +994,19 @@ function nextDoor() {
     const run = runOf(slidDay);
     ghostOrigin = run.origin;
     ghost.setCount(run.run.length);
-    ghost.setArt(run.run);
+    ghost.setArt(run.run, LOOK.spacing);
     pushSurface(ghost);
   }
   /* At the top of its own list, which is where it will be when it arrives:
      showing a day opens it at its first card. */
   ghost.update({
     radius: LOOK.radius,
-    spacing: LOOK.spacing,
     arc: LOOK.arc,
     fade: LOOK.fade,
-    scroll: ghostOrigin,
+    /* Its own first card, which is a place on its drum and not a number: the
+       cards before it are the day before that day's. */
+    scroll: ghost.placeOf(ghostOrigin),
     thickness: LOOK.depth,
-    cycle: false,
     slide: -slid * column() + way * column(),
     frame: half(),
     edge: feather(),
@@ -1040,10 +1076,12 @@ function draw() {
   requestAnimationFrame(draw);
   if (!wheel) return;
 
-  const step = pitch();
-  if (step > 0) {
-    const now = reel.scrollTop / step;
-    if (Math.abs(now - at) > 1e-4) {
+  {
+    /* The scroll is a distance round the drum rather than a count of cards,
+       because cards are not all one height any more: a pixel is a pixel and a
+       card is however tall this one came out. */
+    const now = reel.scrollTop / (cardPx() || 1);
+    if (Math.abs(now - at) > 1e-5) {
       at = now;
       needs = true;
       still = 0;
@@ -1053,13 +1091,13 @@ function draw() {
          scroller which has merely paused — the top of a bounce, a finger
          resting, a wheel between notches — is not taken for one that has
          finished. */
-      const want = Math.round(at) * step;
+      const want = stopFor(on());
       if (Math.abs(reel.scrollTop - want) > 0.5)
         reel.scrollTo({ top: want, behavior: "smooth" });
     }
     /* The detent, felt as it is passed rather than when it settles: that is
        what makes a list of cards a dial and not a page. */
-    const stop = Math.round(at);
+    const stop = on();
     if (stop !== passing) {
       passing = stop;
       tick();
@@ -1086,14 +1124,12 @@ function draw() {
   needs = false;
   wheel.update({
     radius: LOOK.radius,
-    spacing: LOOK.spacing,
     arc: LOOK.arc,
     fade: LOOK.fade,
     /* The day's first card is not the drum's first card: the ones before it are
        yesterday's, and the scroll is counted from the day's own. */
-    scroll: at + origin,
+    scroll: wheel.placeOf(origin) + at,
     thickness: LOOK.depth,
-    cycle: false,
     /*
      * A month along is a column along: a card and a margin, the same 36 that
      * separates everything else on this screen. The one going and the one
@@ -1206,8 +1242,21 @@ window.rayl = {
   get slidDay() {
     return slidDay;
   },
+  get ghostOrigin() {
+    return ghostOrigin;
+  },
   get at() {
     return at;
   },
+  on,
+  /* What the six designs come out at, for a test that wants to know. */
+  get CARD_SIZES() {
+    return Array.from({ length: CARD_COUNT }, (_, i) => cardHeight(i));
+  },
+  get CARD_BLOCKS() {
+    return cardBlocks();
+  },
+  stopFor,
+  travel,
   rails,
 };

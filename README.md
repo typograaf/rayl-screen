@@ -137,11 +137,48 @@ rota built, a tick rung, and the months dragged back by each — which is what
 "it bugs on" was. The suite crosses a month and fails if more than a day or two
 gets laid out.
 
-## Every rest is the same picture
+## A card is cut to what is on it
+
+The design does not have a card height, it has this card's height: an icon two
+points shorter makes a card two points shorter and a third line of title makes
+it eighteen taller. This used to fake that by centring every block in one 128,
+and now it does not.
+
+The air above and below the block is worked back out of the one card the file
+gives a height for — the Schoonmaak one, 330 by 128 — and every other card gets
+the same, so that card still comes out at the file's own height and a third line
+is eighteen more than it rather than eighteen more than a guess.
+
+**One model still, stretched.** Everything above the middle of it moves up and
+everything below moves down, so the corners and the bevel keep exactly the shape
+they were modelled in and only the straight run between them gives — scaling in
+y would have turned every corner into an oval. The stretch is measured off the
+model's own height rather than the design's number, because the two differ by a
+point and every card would have inherited it. Then the mapping is laid on again:
+it is planar and worked out from where the vertices are, so put back after the
+stretch it is right for the new height, and left alone it would have squeezed
+the print into the middle band along with the geometry. Geometries are cached on
+the height — a day is a dozen cards and three or four heights between them.
+
+**The sheet is a grid of the tallest card** with each card drawn at the top of
+its own cell, and a card's tile stops at its own height, so what is left under a
+short card is never sampled. A packer would waste less and cost more to be sure
+of, on a sheet with six things on it.
+
+**And the drum counts distance rather than cards.** Where a card sits is a
+running total of the ones before it — half of each of them and the air between —
+so the scroll, the stops on the reel and where the middle is are all in card
+widths of arc instead of in cards. The radius is still measured in the file's
+card: 1.75 means the same curve whatever mix is on the drum, and a tall card
+simply takes up more of it.
+
+## Every rest is a full frame
 
 The card that is chosen is in the middle of the frame, wherever in the list it
-is: one faded card above it, one below, and the same three places every time it
-comes to rest.
+is: one faded card above it, one below, and three cards every time it comes to
+rest. Not the same three _places_ — the cards are not all the same height, so a
+rest with a three-line card above the chosen one stands differently from a rest
+with a short one, and should.
 
 **Including at the ends of a list**, where there is nothing above the first card
 and nothing below the last and centring the chosen one would leave half a screen
@@ -162,8 +199,7 @@ The middle is what is chosen, so the middle is where it goes, and the emptiness
 above the first card is what the top of a list is.
 
 The suite stops at six places in a list, both ends included, and fails if the
-chosen card is anywhere but the middle or if the three cards on screen stand
-anywhere but where they stood at the last one.
+chosen card is anywhere but the middle or if the frame is not full.
 
 ## A month is a column
 

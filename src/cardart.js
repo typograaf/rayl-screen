@@ -25,8 +25,16 @@ const GAP = 24;
  * The card's outline, in the design's units — half across, half down, and the
  * corner. What the print is laid out in, and what the graded finish measures
  * its falloff against, so the two cannot drift apart.
+ *
+ * Half down is per card, because the height is: the design cuts a card to what
+ * is on it. `CARD_SHAPE` is the one the file draws, and `cardShape` is any of
+ * them.
  */
 export const CARD_SHAPE = { half: [W / 2, H / 2], radius: 24 };
+export const cardShape = (i) => ({
+  half: [W / 2, cardHeight(i) / 2],
+  radius: 24,
+});
 
 /* The design's own two. */
 const INK = "#3f3f3b";
@@ -125,7 +133,10 @@ const CARDS = [
   },
   {
     icon: "icon-6.svg",
-    title: ["Facility", "Manager"],
+    /* Three lines, and the card is eighteen taller for it — the one design here
+       that is a different height from the file's, so that a screen full of them
+       is a screen full of the sizes they come in. */
+    title: ["Assistent", "Facility", "Manager"],
     at: "@Meetdistrict",
     hours: "07:30 — 16:00",
     shift: "1/3",
@@ -137,6 +148,29 @@ const CARDS = [
 
 export const CARD_COUNT = CARDS.length;
 const ROWS = Math.ceil(CARD_COUNT / CARD_COLUMNS);
+
+/*
+ * How tall each card is, in the design's units.
+ *
+ * The design cuts the card to its contents: 24 above the block and 24 below it,
+ * whatever the block comes to. An icon two points shorter is a card two points
+ * shorter and a third line of title is a card eighteen taller — which is what
+ * the file does and what this used to fake by centring every block in one
+ * height. Measured rather than declared, because the block is measured: it is
+ * the type's own cap heights and the icon's own artboard, and neither is a
+ * number anybody can write down.
+ *
+ * Filled in when the sheet is drawn, which is before there is a card to put it
+ * on. Until then every card is the file's own.
+ */
+const sizes = CARDS.map(() => H);
+/* What is on each card, measured, and the air that is added to it — kept so the
+   one rule this follows can be checked rather than described. */
+const blocks = CARDS.map(() => H - 48);
+export const cardBlocks = () => blocks.slice();
+export const cardHeight = (i) =>
+  sizes[((i % CARD_COUNT) + CARD_COUNT) % CARD_COUNT];
+export const cardTallest = () => Math.max(...sizes);
 
 /**
  * An icon, recoloured to the ink and handed back with the size it was cut at.
@@ -213,7 +247,22 @@ function bar(ctx, x, y, w, h, colour) {
  * the progress line, the shift, a rule — six apart, with the two rows sharing
  * whatever is left, which at the design's own height is 25 each.
  */
-function drawCard(ctx, card, ox, oy, icon) {
+/**
+ * What is on a card, measured: the icon, the title and the handle with twelve
+ * between them. The card is this and a margin either side of it.
+ */
+function blockOf(ctx, card, icon) {
+  const iconHeight = icon ? icon.height * ICON : 14;
+  setFace(ctx, 18);
+  const titleCap = capHeight(ctx);
+  setFace(ctx, 10, 0.1);
+  const atCap = capHeight(ctx);
+  return (
+    iconHeight + 12 + (18 * (card.title.length - 1) + titleCap) + 12 + atCap
+  );
+}
+
+function drawCard(ctx, card, ox, oy, icon, tall) {
   ctx.save();
   ctx.translate(ox, oy);
 
@@ -240,8 +289,11 @@ function drawCard(ctx, card, ox, oy, icon) {
   const atCap = capHeight(ctx);
   const atWidth = widthOf(ctx, card.at);
 
-  const height = iconHeight + 12 + (18 + titleCap) + 12 + atCap;
-  const top = (H - height) / 2;
+  const height =
+    iconHeight + 12 + (18 * (card.title.length - 1) + titleCap) + 12 + atCap;
+  /* Which comes to the margin, because the card was cut to the block: this is
+     the same 24 the design draws, arrived at from the other end. */
+  const top = (tall - height) / 2;
   let y = top;
 
   if (icon) {
@@ -251,11 +303,11 @@ function drawCard(ctx, card, ox, oy, icon) {
 
   setFace(ctx, 18);
   card.title.forEach((line, i) => {
-    /* Leading none: the second line sits a full size below the first, and the
-       block is trimmed to the caps of one and the baseline of the other. */
+    /* Leading none: each line sits a full size below the one above it, and the
+       block is trimmed to the caps of the first and the baseline of the last. */
     ctx.fillText(line, PAD, y + titleCap + i * 18);
   });
-  y += 18 + titleCap + 12;
+  y += 18 * (card.title.length - 1) + titleCap + 12;
 
   setFace(ctx, 10, 0.1);
   ctx.fillText(card.at, PAD, y + atCap);
@@ -358,9 +410,39 @@ export async function cardAtlas(scale = PRINT_SCALE) {
   await document.fonts.load("500 10px Azeret");
   const art = await Promise.all(CARDS.map((card) => loadIcon(card.icon)));
 
+  /*
+   * The heights first, because the sheet is cut to them.
+   *
+   * Every cell on the sheet is the tallest card, and each card is drawn at the
+   * top of its own — so a cell is a card and whatever is left under it, and
+   * what is left is never sampled: the card's own tile stops at its own height.
+   * A packer would waste less and cost more to be sure of, on a sheet that has
+   * six things on it.
+   */
+  const measure = document.createElement("canvas").getContext("2d");
+  CARDS.forEach((card, i) => {
+    blocks[i] = blockOf(measure, card, art[i]);
+  });
+  /*
+   * The air above and below the block is the air the file's own card leaves.
+   *
+   * The file gives one card — the third, the Schoonmaak one — at 330 by 128,
+   * and its block measures whatever it measures here: this face's cap heights
+   * and this icon's own artboard, neither of which is a number anybody can
+   * write down. So the padding is worked back out of the one card there is a
+   * height for, and every other card gets the same. That way the card the file
+   * draws comes out at the file's 128 exactly, and a third line of title is 18
+   * more than that rather than 18 more than a guess.
+   */
+  const air = (H - blocks[2]) / 2;
+  CARDS.forEach((card, i) => {
+    sizes[i] = Math.round(blocks[i] + air * 2);
+  });
+  const cell = cardTallest();
+
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(W * CARD_COLUMNS * scale);
-  canvas.height = Math.round(H * ROWS * scale);
+  canvas.height = Math.round(cell * ROWS * scale);
   const ctx = canvas.getContext("2d");
   /* The scale, once, on the context: everything after this is the design's own
      numbers, at whatever size the sheet is being drawn. */
@@ -369,7 +451,7 @@ export async function cardAtlas(scale = PRINT_SCALE) {
   CARDS.forEach((card, i) => {
     const column = i % CARD_COLUMNS;
     const row = Math.floor(i / CARD_COLUMNS);
-    drawCard(ctx, card, column * W, row * H, art[i]);
+    drawCard(ctx, card, column * W, row * cell, art[i], sizes[i]);
   });
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -382,23 +464,25 @@ export async function cardAtlas(scale = PRINT_SCALE) {
 /**
  * Where card `i` sits on the sheet, as a scale and an offset in uv.
  *
- * `period` is how often the run of designs starts over. Six is every design
- * once, which is what a list wants; anything shorter is a shorter run repeated,
- * which is what a loop wants — see the wheel, where the reason a loop needs one
- * is set out.
+ * The cells are a grid of the tallest card and each one is drawn at the top of
+ * its cell, so the scale down the sheet is that card's own height rather than
+ * the cell's — which is what keeps a short card's print off the bottom of a
+ * tall card's cell.
  */
-export function cardTile(i, period = CARD_COUNT) {
-  const run = Math.max(1, Math.round(period));
-  const index =
-    (((((i % run) + run) % run) % CARD_COUNT) + CARD_COUNT) % CARD_COUNT;
+export function cardTile(i) {
+  const index = ((i % CARD_COUNT) + CARD_COUNT) % CARD_COUNT;
   const column = index % CARD_COLUMNS;
   const row = Math.floor(index / CARD_COLUMNS);
+  const cell = cardTallest();
+  const tall = cardHeight(index);
+  const sheet = cell * ROWS;
   return [
     1 / CARD_COLUMNS,
-    1 / ROWS,
+    tall / sheet,
     column / CARD_COLUMNS,
     /* v runs down the canvas and up the texture, so the first row of cells is
-       the last row of uv. */
-    (ROWS - 1 - row) / ROWS,
+       the last row of uv — and a card sits at the top of its cell, so its own
+       height is measured down from there. */
+    1 - (row * cell + tall) / sheet,
   ];
 }

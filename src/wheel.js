@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { CARD_ASPECT } from "./card.js";
-import { cardTile, CARD_SHAPE } from "./cardart.js";
+import { CARD_ASPECT, cardFor, CARD_WIDE } from "./card.js";
+import { cardTile, cardHeight, cardShape, CARD_SHAPE } from "./cardart.js";
 
 /**
  * The wheel: a list of cards mounted round the outside of a drum.
@@ -23,13 +23,23 @@ import { cardTile, CARD_SHAPE } from "./cardart.js";
  * Nothing is drawn on the far side. A drum is a loop and a list is not, so a
  * card that has been scrolled past has gone rather than come round: past the
  * arc it is switched off, and for the last few degrees before that it fades, so
- * it leaves rather than blinks. That also means the list can be longer than the
- * drum's own circumference without cards colliding with themselves on the far
- * side, which is the thing that makes a wheel a carousel and not a list.
+ * it leaves rather than blinks.
+ *
+ * And the cards are not all the same size. The design cuts a card to what is on
+ * it, so where each one sits is a running total of the ones before it — half of
+ * each of them and the air between — rather than its number times a pitch. The
+ * scroll is a distance round the drum for the same reason: a count of cards is
+ * only a distance when every card is the same.
  */
 
-/* The card, as the model has it: one unit across and this much down. */
+/* The card the file draws: one unit across and this much down. Cards are not
+   all this tall — the design cuts each one to what is on it — but the drum is
+   still measured in these, so that a radius of 1.75 means the same curve
+   whatever mix of cards is on it. */
 export const CARD_HEIGHT = 1 / CARD_ASPECT;
+
+/** A design's height, in the same units: a share of the card's width. */
+export const heightOf = (design) => cardHeight(design) / CARD_WIDE;
 
 const RADIANS = Math.PI / 180;
 
@@ -229,8 +239,11 @@ export class Wheel {
     this.geometry = geometry;
     this.atlas = atlas;
     this.cards = [];
-    /* How often the run of designs starts over. Six is every design once. */
-    this.period = 6;
+    /* How tall each card on the drum is, and how far round the drum it sits
+       from the first — both in the card's own units, and both worked out from
+       what is printed on them. */
+    this.tall = [];
+    this.round = [];
   }
 
   /** As many cards as the panel asks for, each with its own design. */
@@ -244,36 +257,12 @@ export class Wheel {
       const i = this.cards.length;
       const card = new THREE.Mesh(
         this.geometry,
-        cardMaterial(this.atlas, cardTile(i, this.period)),
+        cardMaterial(this.atlas, cardTile(i)),
       );
       card.castShadow = true;
       card.receiveShadow = true;
       this.cards.push(card);
       this.scene.add(card);
-    }
-  }
-
-  /**
-   * How often the run of designs starts over.
-   *
-   * Which is what decides whether a loop closes, and there is no way round it.
-   * Turning the wheel a whole number of cards puts every card where another one
-   * was — the places always match — so what is left is what is printed on them.
-   * Move three cards along a run of six and every slot has a design it did not
-   * have before: the last frame is a different picture from the first, and a
-   * loop of it cuts.
-   *
-   * So the run is made to be the travel. Two cards along, two designs; three
-   * along, three; six along, all six, which is where this opens. It is the one
-   * arrangement in which moving by the travel lands every card on a card
-   * carrying the same design, and a loop that does that has no seam in it.
-   */
-  setDesigns(period) {
-    this.period = Math.max(1, Math.round(period));
-    for (let i = 0; i < this.cards.length; i++) {
-      this.cards[i].material.userData.tile.value.set(
-        ...cardTile(i, this.period),
-      );
     }
   }
 
@@ -284,11 +273,65 @@ export class Wheel {
    * close; a day's shifts are a list and repeat only by coincidence, so here
    * every card is told what it is.
    */
-  setArt(designs) {
+  setArt(designs, spacing = 0) {
+    this.tall = [];
     for (let i = 0; i < this.cards.length; i++) {
       const design = designs[i % designs.length];
-      this.cards[i].material.userData.tile.value.set(...cardTile(design));
+      const card = this.cards[i];
+      const tall = heightOf(design);
+      this.tall.push(tall);
+      card.material.userData.tile.value.set(...cardTile(design));
+      /* The shape the graded finish measures its falloff against is this card's
+         own, or a tall card would be lit like a short one. */
+      const shape = cardShape(design);
+      card.material.userData.shape.value.set(
+        shape.half[0],
+        shape.half[1],
+        shape.radius,
+      );
+      /* And the model, stretched to the height this design came out at. */
+      card.geometry = cardFor(tall) || card.geometry;
     }
+    this.lay(spacing);
+  }
+
+  /**
+   * How far round the drum each card sits, in the card's own units.
+   *
+   * Which used to be `i` times a pitch, and cannot be once the cards are not
+   * all the same height: the distance from one to the next is half of each of
+   * them and the air between. So it is a running total, and everything that
+   * used to count in cards — the scroll, the stops on the reel, where the
+   * middle is — counts in this instead. There are a dozen of them; it is worked
+   * out when the day changes and read from an array after that.
+   */
+  lay(spacing) {
+    const air = CARD_HEIGHT * spacing;
+    this.round = [0];
+    for (let i = 1; i < this.tall.length; i++) {
+      this.round.push(
+        this.round[i - 1] + (this.tall[i - 1] + this.tall[i]) / 2 + air,
+      );
+    }
+  }
+
+  /** Which card is nearest a place on the drum. */
+  nearest(round) {
+    let best = 0;
+    let gap = Infinity;
+    for (let i = 0; i < this.round.length; i++) {
+      const away = Math.abs(this.round[i] - round);
+      if (away < gap) {
+        gap = away;
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  /** Where a card sits on the drum. */
+  placeOf(i) {
+    return this.round[Math.max(0, Math.min(i, this.round.length - 1))] || 0;
   }
 
   /**
@@ -345,34 +388,32 @@ export class Wheel {
    */
   update({
     radius,
-    spacing,
     arc,
     fade,
     scroll,
     thickness,
-    cycle,
     lean = 0,
     slide = 0,
     frame = Infinity,
     edge = 1,
   }) {
+    /*
+     * The drum is measured in the file's card and not in whichever card is on
+     * it. A radius of 1.75 is 1.75 of the card the design draws, so a day
+     * carrying a tall card is the same curve as a day that is not — the tall
+     * one simply takes up more of it.
+     */
     const R = Math.max(radius, 0.2) * CARD_HEIGHT;
-    const step = (CARD_HEIGHT * (1 + spacing)) / R;
     const limit = arc * RADIANS;
     const soft = Math.max(fade * RADIANS, 1e-4);
     const count = this.cards.length;
 
     for (let i = 0; i < count; i++) {
       const card = this.cards[i];
-      /*
-       * Cycling, a card stands at its nearest repeat rather than at its one
-       * place in the list — which is what makes a finite list endless without
-       * a second set of cards to draw. The arc holds five or six of them and
-       * there are a dozen, so the nearest repeat is the only one that could be
-       * on screen anyway.
-       */
-      const place = cycle ? i + Math.round((scroll - i) / count) * count : i;
-      const theta = (scroll - place) * step;
+      const tall = this.tall[i] ?? CARD_HEIGHT;
+      /* Where this card sits on the drum, which is a running total of the ones
+         before it rather than its number times a pitch. */
+      const theta = (scroll - this.placeOf(i)) / R;
       if (Math.abs(theta) >= limit) {
         card.visible = false;
         continue;
@@ -419,7 +460,7 @@ export class Wheel {
        * it is whole, and one that carries on past it is gone before it can be
        * cut. One number does both.
        */
-      const outer = Math.abs(card.position.y) + CARD_HEIGHT / 2;
+      const outer = Math.abs(card.position.y) + tall / 2;
       const near = Math.max(0, Math.min((frame - outer) / edge, 1));
       const opacity = Math.min(turned, near * near * (3 - 2 * near));
       /* Nothing else to say: the material has been see-through since it was
@@ -429,7 +470,6 @@ export class Wheel {
          something the picture does not. */
       card.castShadow = opacity > 0.02;
     }
-    this.step = step;
   }
 
   /** Off, without taking it apart — the cards stay for the next time. */
@@ -437,8 +477,8 @@ export class Wheel {
     for (const card of this.cards) card.visible = false;
   }
 
-  /** How many steps of scroll there are, end to end. */
+  /** How far round the drum the whole run goes, end to end. */
   span() {
-    return Math.max(this.cards.length - 1, 0);
+    return this.placeOf(this.round.length - 1);
   }
 }
