@@ -120,11 +120,24 @@ const mark = () => {
   needs = true;
 };
 
-/** The frustum, from the one number that matters: how much of the width a card
-    at rest takes. */
+/**
+ * How wide a card is on screen, in pixels.
+ *
+ * The column's, less the sliver the state leaves either side of it — and taken
+ * from the column rather than from the canvas, because the two are no longer
+ * the same thing. The canvas runs to the edges of the screen so that a column
+ * of cards can leave by one; the card is still the width the design draws it.
+ */
+function cardPx() {
+  const column = document.querySelector(".calendar").clientWidth;
+  return (column || canvas.clientWidth) * LOOK.fill;
+}
+
+/** The frustum, in cards: how many of them the canvas is across and down. */
 function frame() {
-  const width = 1 / LOOK.fill;
-  const height = width / (canvas.clientWidth / canvas.clientHeight || 1);
+  const wide = cardPx() || 1;
+  const width = canvas.clientWidth / wide;
+  const height = canvas.clientHeight / wide;
   camera.left = -width / 2;
   camera.right = width / 2;
   camera.top = height / 2;
@@ -135,8 +148,7 @@ function frame() {
 /** How far apart two cards are on screen, which is what a stop in the reel is
     worth: the card's own height at this size, plus the air between them. */
 function pitch() {
-  const wide = canvas.clientWidth * LOOK.fill;
-  return (wide / CARD_ASPECT) * (1 + LOOK.spacing);
+  return (cardPx() / CARD_ASPECT) * (1 + LOOK.spacing);
 }
 
 function resize() {
@@ -490,6 +502,40 @@ let passing = 0;
    reason to draw as much as the reel being dragged down is. */
 let slid = 0;
 
+/*
+ * And where a flick that has run out is put right.
+ *
+ * The stops are proximity rather than mandatory, because mandatory snapping on
+ * iOS ends a flick at the next stop however hard it was thrown — a list that
+ * moves one card per swipe and cannot be spun. What proximity gives up is the
+ * guarantee: momentum that dies between two cards is left between two cards,
+ * and the middle of this screen is a choice, so it cannot be. So the loop
+ * watches for the scroller having stopped, and if it has stopped anywhere but
+ * on a card it is sent to the nearest one.
+ *
+ * Not while a finger is down: a scroller being corrected under a hand is a
+ * scroller fighting it.
+ */
+let held = false;
+let still = 0;
+reel.addEventListener(
+  "touchstart",
+  () => {
+    held = true;
+    still = 0;
+  },
+  { passive: true },
+);
+for (const done of ["touchend", "touchcancel"]) {
+  reel.addEventListener(
+    done,
+    () => {
+      held = false;
+    },
+    { passive: true },
+  );
+}
+
 /* --------------------------------------------------------------- the loop --- */
 
 /** Nought at the ends of the list, one anywhere inside it, eased. */
@@ -525,15 +571,18 @@ function drift() {
     cell.offsetLeft + cell.offsetWidth / 2 - found.rail.clientWidth / 2;
   /* A month along is the cell plus the rule and the two gaps beside it. */
   const step = cell.offsetWidth + 2 + 12;
-  return Math.max(-1.4, Math.min((found.rail.scrollLeft - home) / step, 1.4));
+  return Math.max(-0.6, Math.min((found.rail.scrollLeft - home) / step, 0.6));
 }
 
-/** Half the frame less half a card, in the world's units: how far the wheel
-    has to slide for the card at the end to sit against the edge. */
+/** Half the frame, in the world's units. */
+function half() {
+  return canvas.clientHeight / (cardPx() || 1) / 2;
+}
+
+/** Half the frame less half a card: how far the wheel has to slide for the card
+    at the end to sit against the edge. */
 function room() {
-  const height =
-    1 / LOOK.fill / (canvas.clientWidth / canvas.clientHeight || 1);
-  return height / 2 - CARD_HEIGHT / 2;
+  return half() - CARD_HEIGHT / 2;
 }
 
 function draw() {
@@ -546,6 +595,14 @@ function draw() {
     if (Math.abs(now - at) > 1e-4) {
       at = now;
       needs = true;
+      still = 0;
+    } else if (!held && ++still === 4) {
+      /* Stopped, and stopped between two cards: on to the nearer one. The four
+         frames are so that a scroller which has merely paused — the top of a
+         bounce, a finger resting — is not taken for one that has finished. */
+      const want = Math.round(at) * step;
+      if (Math.abs(reel.scrollTop - want) > 0.5)
+        reel.scrollTo({ top: want, behavior: "smooth" });
     }
     /* The detent, felt as it is passed rather than when it settles: that is
        what makes a list of cards a dial and not a page. */
@@ -575,7 +632,20 @@ function draw() {
     thickness: LOOK.depth,
     cycle: false,
     lean: (1 - open) * (at <= span / 2 ? room() : -room()),
-    slide: -slid / LOOK.fill,
+    /*
+     * Half a month along is a screen along, and that is the number that makes
+     * it a column rather than a jump.
+     *
+     * Half a month is where the middle passes from one month to the next, which
+     * is the moment the day changes and the cards with it: the column being
+     * measured stops being the one that was leaving and becomes the one that
+     * has arrived, at the same distance out the other side. Whatever is on
+     * screen at that moment is cut to whatever is on screen after it — so the
+     * travel is set to put the changeover exactly where a column is one whole
+     * screen out and there is nothing on screen to cut.
+     */
+    slide: (-slid * 2 * canvas.clientWidth) / (cardPx() || 1),
+    frame: half(),
   });
   renderer.render(scene, camera);
 }

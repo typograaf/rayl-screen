@@ -156,6 +156,44 @@ Only under a hand, though. The days push the months along too, and a column
 sliding out because the day it is showing has crossed into another month would
 be the screen answering a question nobody asked.
 
+**Half a month is a whole screen**, and that number is the whole of why it reads
+as a column. Half a month is where the middle passes from one month to the next
+— the moment the day changes and the cards with it — so whatever is on screen
+then is cut to whatever is on screen after. Setting the travel so a column is
+one full screen out at that moment puts the changeover where there is nothing on
+screen to cut. The canvas runs to the edges of the screen for the same reason: a
+column that stopped at the column's own edge was cut off 36 points early, in
+mid-air, on a background that carries on past it.
+
+## Nothing is cut by an edge
+
+The drum's own fade is a card turning away. That is the whole story at its own
+radius — the arc is done with a card well before the card reaches an edge — and
+none of it once the drum opens out flat at the ends of a list, where nothing has
+turned by more than a few degrees. So the frame simply stopped: the card at the
+bottom of the first screen was cut through the middle by a line in mid-air, and
+the card the list ends on was cut in half on the way to landing.
+
+A card fades on its way out of the frame as well, by however much of it is past
+the edge — nothing while it is inside, gone by the time it is half out, which is
+before the cut can be seen. The card that ends the list is the case that has to
+be right: at either end one card sits flush against an edge, wholly inside the
+frame, and being flush is not being past.
+
+## It can be spun
+
+The stops are proximity, not mandatory. Mandatory snapping on iOS ends a flick
+at the next stop however hard it was thrown — one card per swipe, a list that
+cannot be spun. Under proximity the phone's momentum runs its course and the
+snap only takes over near the end of it, and the ends still rubber-band and
+settle the way a picker does.
+
+What proximity gives up is the guarantee, and the middle of this screen is a
+choice, so it cannot be given up: the loop watches for a scroller that has
+stopped anywhere but on a card and sends it to the nearest one. Four still
+frames before it believes the scrolling is over, and never while a finger is
+down.
+
 ## The tick
 
 Safari has no Vibration API. `navigator.vibrate` is not on any iPhone and never

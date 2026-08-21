@@ -621,6 +621,143 @@ check(
   `${(await page.evaluate(() => window.rayl.wheel.cards[0].position.x)).toFixed(3)}`,
 );
 
+/*
+ * And nothing is ever cut by the edge of the frame.
+ *
+ * The drum's own fade is a card turning away, which is the whole story at its
+ * own radius and none of it when it is opened out flat at the ends of a list:
+ * there, nothing has turned by more than a few degrees, so the frame simply
+ * stopped and a card at the bottom of the first screen was cut through the
+ * middle by a line in mid-air. A card fades on its way out now as well, and is
+ * gone by the time enough of it is past an edge for the cut to be seen.
+ */
+const cut = await page.evaluate(async () => {
+  const reel = document.getElementById("reel");
+  const step = reel.children[0].getBoundingClientRect().height;
+  const frame = () => new Promise((r) => requestAnimationFrame(r));
+  let worst = 0;
+  const stops = reel.children.length - 1;
+  for (let i = 0; i <= 40; i++) {
+    reel.scrollTop = (step * stops * i) / 40;
+    await frame();
+    await frame();
+    const view = window.rayl.camera;
+    const edge = view.top;
+    const tall = 1 / 2.5776; /* CARD_HEIGHT, near enough for a bound */
+    for (const card of window.rayl.wheel.cards) {
+      if (!card.visible || card.material.opacity <= 0.02) continue;
+      const out = (Math.abs(card.position.y) + tall / 2 - edge) / tall;
+      if (out > worst) worst = out;
+    }
+  }
+  return { worst };
+});
+check(
+  "nothing is ever cut by the edge of the frame",
+  cut.worst < 0.6,
+  `the most of a card ever left showing past an edge is ${(cut.worst * 100).toFixed(0)}%`,
+);
+
+/* And the card the list ends on lands inside the frame, against the bottom of
+   it — the one card that is flush with an edge and must not fade for it. */
+const landed = await page.evaluate(async () => {
+  const reel = document.getElementById("reel");
+  reel.scrollTop = reel.scrollHeight;
+  await new Promise((r) => setTimeout(r, 300));
+  const last = window.rayl.wheel.cards[window.rayl.wheel.cards.length - 1];
+  const tall = 1 / 2.5776;
+  return {
+    over: -(last.position.y - tall / 2) - window.rayl.camera.top,
+    opacity: last.material.opacity,
+  };
+});
+check(
+  "and the last card lands in its container, whole",
+  Math.abs(landed.over) < 0.01 && landed.opacity > 0.99,
+  `${(landed.over * 100).toFixed(1)}% of a card past the bottom, at opacity ${landed.opacity.toFixed(2)}`,
+);
+
+/*
+ * The picture is the screen's width and the cards on it are the column's.
+ *
+ * A column of cards that stops at the column's own edge is a column cut off 36
+ * points early in mid-air, so the canvas runs to the edges of the screen — and
+ * the cards are cut to the column regardless, which is the thing that must not
+ * move.
+ */
+const bleed = await page.evaluate(() => {
+  const box = document.querySelector(".cards").getBoundingClientRect();
+  const view = window.rayl.camera;
+  const column = document.querySelector(".calendar").clientWidth;
+  return {
+    canvas: Math.round(box.width),
+    screen: window.innerWidth,
+    card: box.width / (view.right - view.left),
+    column,
+  };
+});
+check(
+  "the picture runs to the edges of the screen",
+  bleed.canvas === bleed.screen && bleed.canvas > bleed.column,
+  `${bleed.canvas} across, against a column of ${bleed.column}`,
+);
+check(
+  "and a card is still the width of the column",
+  Math.abs(bleed.card - bleed.column * 0.99) < 1,
+  `${bleed.card.toFixed(1)} against ${(bleed.column * 0.99).toFixed(1)}`,
+);
+
+/* And half a month carries the column a whole screen, so the halfway point —
+   where the day changes and the cards with it — falls exactly where a column is
+   off the screen and there is nothing on it to cut. */
+const paged = await page.evaluate(async () => {
+  const rail = document.getElementById("months");
+  const snap = rail.style.scrollSnapType;
+  rail.style.scrollSnapType = "none";
+  const cell = rail.querySelector(".cell");
+  rail.scrollLeft += (cell.offsetWidth + 14) / 2;
+  await new Promise((r) => requestAnimationFrame(r));
+  await new Promise((r) => requestAnimationFrame(r));
+  const view = window.rayl.camera;
+  const across = view.right - view.left;
+  const seen = {
+    drift: window.rayl.drift(),
+    screens:
+      window.rayl.wheel.cards[Math.round(window.rayl.at)].position.x / across,
+  };
+  rail.style.scrollSnapType = snap;
+  rail.scrollLeft -= (cell.offsetWidth + 14) / 2;
+  return seen;
+});
+check(
+  "half a month along is a screen along",
+  Math.abs(Math.abs(paged.screens) - 2 * Math.abs(paged.drift)) < 0.05 &&
+    Math.abs(paged.screens) > 0.9,
+  `half a month dragged put the column ${(paged.screens * 100).toFixed(0)}% of a screen over`,
+);
+
+/*
+ * And a flick that dies between two cards is put on one.
+ *
+ * The stops are proximity rather than mandatory: mandatory snapping on iOS ends
+ * a flick at the next stop however hard it was thrown, so the list could not be
+ * spun. What it gives up is the guarantee, and the middle of this screen is a
+ * choice — so the loop watches for a scroller that has stopped anywhere but on
+ * a card, and sends it to the nearest one.
+ */
+const settled = await page.evaluate(async () => {
+  const reel = document.getElementById("reel");
+  const step = reel.children[0].getBoundingClientRect().height;
+  reel.scrollTop = step * 2.5;
+  await new Promise((r) => setTimeout(r, 900));
+  return { at: window.rayl.at };
+});
+check(
+  "a spin that stops between two cards is put on one",
+  Math.abs(settled.at - Math.round(settled.at)) < 0.02,
+  `left at 2.5, came to rest at ${settled.at.toFixed(3)}`,
+);
+
 /* ----------------------------------------------------------- the haptics --- */
 
 check(

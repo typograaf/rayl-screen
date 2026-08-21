@@ -308,13 +308,26 @@ body.starting .screen {
 
 /* ------------------------------------------------------------- the cards --- */
 
+/*
+ * The picture is the width of the screen; the cards on it are the width of the
+ * column.
+ *
+ * Dragging the months carries the day's cards sideways, and a column that stops
+ * at the column's own edge is a column cut off 36 points early, in mid-air, on
+ * a background that carries on past it. So the canvas is pulled out to the
+ * edges of the screen and the cards leave by those instead. Nothing about the
+ * cards changes: their size is taken from the column either way, and the screen
+ * clips what reaches its own edge, which is the one place a cut reads as a cut
+ * ought to.
+ */
 .cards {
   /* 36 under the calendar, and 36 above the tabs. */
   margin-top: 36px;
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  width: 100%;
+  width: 100vw;
+  margin-inline: -36px;
   overflow: clip;
 }
 
@@ -339,7 +352,17 @@ body.starting .screen {
   inset: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  scroll-snap-type: y mandatory;
+  /*
+   * Proximity, not mandatory.
+   *
+   * Mandatory snapping on iOS ends a flick at the next stop, however hard it
+   * was thrown: the list moves one card per swipe and cannot be spun. Under
+   * proximity the phone's momentum runs its course and the snap only takes over
+   * near the end of it — so it can be spun and caught, and what it comes to
+   * rest on is still a card, with the loop putting it exactly on one if the
+   * momentum happens to die between two.
+   */
+  scroll-snap-type: y proximity;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;

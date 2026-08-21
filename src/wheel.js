@@ -353,6 +353,7 @@ export class Wheel {
     cycle,
     lean = 0,
     slide = 0,
+    frame = Infinity,
   }) {
     const R = Math.max(radius, 0.2) * CARD_HEIGHT;
     const step = (CARD_HEIGHT * (1 + spacing)) / R;
@@ -392,7 +393,36 @@ export class Wheel {
       card.scale.z = thickness;
 
       const over = Math.abs(theta) - (limit - soft);
-      const opacity = over <= 0 ? 1 : Math.max(0, 1 - over / soft);
+      const turned = over <= 0 ? 1 : Math.max(0, 1 - over / soft);
+      /*
+       * And a card fades as it leaves the frame, by however much of it has
+       * left.
+       *
+       * The fade above is the drum's: a card fades because it has turned away,
+       * which is the whole of it while the drum is at its own radius — the arc
+       * is done with a card well before the card reaches an edge, so no edge is
+       * ever involved. Open the drum out flat at the ends of a list and that
+       * stops being true. Nothing has turned by more than a few degrees, so
+       * nothing fades, and the frame simply stops: a card at the bottom of the
+       * first screen is cut through the middle by a line in mid-air.
+       *
+       * So a card also fades on its way out of the frame, in proportion to how
+       * much of it is past the edge — nought while it is inside, gone by the
+       * time it is half out, which is before the cut can be seen. It reads the
+       * same as the turning does and it costs nothing at the other radius,
+       * because there a card is long gone before it gets near an edge.
+       *
+       * The card that ends the list is the case this has to get right: at
+       * either end one card sits flush against an edge, wholly inside the
+       * frame, and this leaves it alone — being flush is not being past.
+       */
+      const out =
+        (Math.abs(card.position.y) + CARD_HEIGHT / 2 - frame) / CARD_HEIGHT;
+      const leaving = Math.max(0, Math.min((out - 0.05) / 0.5, 1));
+      const opacity = Math.min(
+        turned,
+        1 - leaving * leaving * (3 - 2 * leaving),
+      );
       /* Nothing else to say: the material has been see-through since it was
          made, so this is a uniform and not a recompile. */
       card.material.opacity = opacity;
