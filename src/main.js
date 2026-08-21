@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { loadCard, CARD_ASPECT } from "./card.js";
 import { cardAtlas, CARD_COUNT } from "./cardart.js";
-import { Wheel } from "./wheel.js";
+import { Wheel, CARD_HEIGHT } from "./wheel.js";
 import { Lighting } from "./environment.js";
 import { buildCalendar, dayInMonth } from "./calendar.js";
 import { mountHaptics } from "./haptics.js";
@@ -56,7 +56,22 @@ const LOOK = {
 
 /* The file's four, and only those: they come to exactly the width of the
    column with the rules and the gaps taken out, which is why there are four. */
-const DISTANCES = ["<5km", "<20km", "<50km", "Custom"];
+/* Three of them show at a time, cut to the months' width — so the row scrolls,
+   and what is past the edge is reached the same way a month is. */
+/*
+ * How flat the wheel goes at the ends of a list, in card heights.
+ *
+ * At rest the first card is the one that is chosen, so it is in the middle —
+ * and the half of the frame above it is empty, which reads as a list that has
+ * lost something rather than a list at its start. So the wheel opens out: at
+ * either end it is nearly a straight line with the chosen card at the top of
+ * the frame and the rest running down it, and it curls back to its own radius
+ * over the first card of scrolling. The one that is chosen is under the ticks
+ * either way; what changes is where the ticks are looking.
+ */
+const FLAT = 10;
+
+const DISTANCES = ["<5km", "<20km", "<50km", "<100km", "Custom"];
 
 const canvas = document.getElementById("stage");
 const cards = document.querySelector(".cards");
@@ -154,6 +169,9 @@ function shiftsOn(date) {
 }
 
 let shifts = [];
+/* How many times a day has been laid out, which is the count that says whether
+   a month arrived in one move or walked there. */
+let built = 0;
 
 /** The reel gets a stop for every card, and enough air either side that the
     first and the last can reach the middle. */
@@ -165,6 +183,7 @@ function layReel() {
 }
 
 function showDay(index, { jump = true } = {}) {
+  built++;
   chosen = index;
   const day = calendar.days[chosen];
   shifts = shiftsOn(day.date);
@@ -222,9 +241,11 @@ function cutCells() {
   document
     .getElementById("days")
     .style.setProperty("--cell", `${share(0, 6, 7)}px`);
+  /* The distances are cut like the months: three across, the same width, their
+     rules on the same lines. */
   document
     .getElementById("distance")
-    .style.setProperty("--cell", `${share(5, 8, 4)}px`);
+    .style.setProperty("--cell", `${share(4, 6, 3)}px`);
 }
 
 /**
@@ -279,8 +300,21 @@ function mountRail(name, cells, onSettle) {
     showing = now;
     for (const cell of rail.querySelectorAll(".cell"))
       cell.dataset.on = String(Number(cell.dataset.index) === now);
-    tick();
-    onSettle(now);
+    /*
+     * A rail that has been put somewhere says so.
+     *
+     * Scrolling the months to September used to drag the days along one month
+     * at a time — every month the smooth scroll passed through moved the days,
+     * which moved the months back, and the two went through every day between
+     * here and there ringing all the way.
+     *
+     * So the two things a rail does when it settles are told apart. What it is
+     * for happens either way: a day chosen is a day chosen, however it got
+     * there. What it says to the other rail does not, because the other rail is
+     * where it came from.
+     */
+    if (!found.driven) tick();
+    onSettle(now, found.driven);
   };
 
   rail.addEventListener("scroll", settle, { passive: true });
@@ -309,18 +343,38 @@ function mountRail(name, cells, onSettle) {
     railTo(name, index);
   });
 
-  const found = { rail, settle, chosenOf, showing: () => showing, fit };
+  const found = {
+    rail,
+    settle,
+    chosenOf,
+    showing: () => showing,
+    fit,
+    driven: false,
+    /* Cleared when the scroll it started has stopped, or after long enough that
+       it must have. */
+    let_go: null,
+  };
   rails[name] = found;
   return found;
 }
 
 /** Put a rail on a cell, without it counting as somebody scrolling it. */
 function railTo(name, index, behavior = "smooth") {
-  const { rail } = rails[name];
-  const cell = rail.querySelector(`.cell[data-index="${index}"]`);
+  const found = rails[name];
+  if (!found) return;
+  const cell = found.rail.querySelector(`.cell[data-index="${index}"]`);
   if (!cell) return;
-  const left = cell.offsetLeft + cell.offsetWidth / 2 - rail.clientWidth / 2;
-  rail.scrollTo({ left, behavior });
+  const left =
+    cell.offsetLeft + cell.offsetWidth / 2 - found.rail.clientWidth / 2;
+  found.driven = true;
+  clearTimeout(found.let_go);
+  found.let_go = setTimeout(
+    () => {
+      found.driven = false;
+    },
+    behavior === "smooth" ? 600 : 80,
+  );
+  found.rail.scrollTo({ left, behavior });
 }
 
 /*
@@ -357,15 +411,18 @@ function mountCalendar() {
     months.push(rule(), cell(i, month.label));
   });
   months.push(rule());
-  mountRail("months", months, (index) => {
+  mountRail("months", months, (index, driven) => {
     /*
      * A month scrolled to takes the days with it — to the same date if that
-     * month has one. Only when it is not already the month the chosen day is
-     * in, so the days pushing the months along does not push back.
+     * month has one. Not when the days are what moved it, and not when it is
+     * already the month the chosen day is in.
      */
+    if (driven) return;
     if (calendar.days[chosen].month === index) return;
     const day = dayInMonth(calendar, index, calendar.days[chosen].number);
-    railTo("days", day);
+    /* Put there, not walked there: a month away is thirty days of scrolling,
+       and every one of them would be a day chosen, a rota built and a tick. */
+    railTo("days", day, "instant");
   });
 
   /* Days: label, rule, date — no rules between them, which is the file. */
@@ -383,9 +440,11 @@ function mountCalendar() {
     node.append(name, bar, number);
     return node;
   });
-  mountRail("days", days, (index) => {
+  mountRail("days", days, (index, driven) => {
     showDay(index);
-    /* And the month follows the day off the end of itself. */
+    /* And the month follows the day off the end of itself — unless the month is
+       where the day came from. */
+    if (driven) return;
     const month = calendar.days[index].month;
     if (rails.months.showing() !== month) railTo("months", month);
   });
@@ -416,6 +475,22 @@ let passing = 0;
 
 /* --------------------------------------------------------------- the loop --- */
 
+/** Nought at the ends of the list, one anywhere inside it, eased. */
+function curl() {
+  const span = Math.max(shifts.length - 1, 0);
+  const edge = Math.min(at, span - at);
+  const t = Math.max(0, Math.min(edge, 1));
+  return t * t * (3 - 2 * t);
+}
+
+/** Half the frame less half a card, in the world's units: how far the wheel
+    has to slide for the card at the end to sit against the edge. */
+function room() {
+  const height =
+    1 / LOOK.fill / (canvas.clientWidth / canvas.clientHeight || 1);
+  return height / 2 - CARD_HEIGHT / 2;
+}
+
 function draw() {
   requestAnimationFrame(draw);
   if (!wheel) return;
@@ -438,14 +513,17 @@ function draw() {
 
   if (!needs) return;
   needs = false;
+  const open = curl();
+  const span = Math.max(shifts.length - 1, 0);
   wheel.update({
-    radius: LOOK.radius,
+    radius: LOOK.radius + (1 - open) * (FLAT - LOOK.radius),
     spacing: LOOK.spacing,
     arc: LOOK.arc,
     fade: LOOK.fade,
     scroll: at,
     thickness: LOOK.depth,
     cycle: false,
+    lean: (1 - open) * (at <= span / 2 ? room() : -room()),
   });
   renderer.render(scene, camera);
 }
@@ -509,6 +587,10 @@ window.rayl = {
   get shifts() {
     return shifts;
   },
+  get built() {
+    return built;
+  },
+  curl,
   get at() {
     return at;
   },

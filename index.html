@@ -33,11 +33,19 @@
       </header>
 
       <section class="calendar">
-        <!-- Each of these is a scroller with a rule either side of every cell,
-             and the one in the middle is the one that is chosen. -->
+        <!--
+          Three rails with a tick above and below each of them, at the middle of
+          the column — node 893:7501. The ticks are how the screen says where
+          the choosing happens: two points wide, six tall, dead centre, and the
+          thing under them is the thing that is chosen.
+        -->
+        <span class="tick"></span>
         <div class="rail months" id="months" aria-label="Maand"></div>
+        <span class="tick"></span>
         <div class="rail days" id="days" aria-label="Dag"></div>
+        <span class="tick"></span>
         <div class="rail distance" id="distance" aria-label="Afstand"></div>
+        <span class="tick"></span>
       </section>
 
       <section class="cards">

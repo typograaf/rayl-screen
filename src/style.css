@@ -94,8 +94,13 @@ body.starting .screen {
    * about what the home indicator wants anyway — so it is that or the device's
    * own inset, whichever is more.
    */
-  padding: calc(env(safe-area-inset-top, 0px) + 65px) 36px
-    max(37px, calc(env(safe-area-inset-bottom, 0px) + 4px));
+  /*
+   * 24 under the status bar, 36 either side, and 36 under the tabs — node
+   * 893:7501, where everything below the mark is 36 apart and the column ends
+   * 36 above the bottom of the screen.
+   */
+  padding: calc(env(safe-area-inset-top, 0px) + 24px) 36px
+    max(36px, env(safe-area-inset-bottom, 0px));
   background: linear-gradient(
     180deg,
     var(--paper-top) 0.349%,
@@ -153,13 +158,34 @@ body.starting .screen {
 /* ---------------------------------------------------------- the calendar --- */
 
 .calendar {
-  /* 36 under the mark. */
+  /* 36 under the mark, and 6 between everything inside it — the rails and the
+     ticks alike. */
   margin-top: 36px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
   width: 100%;
   flex: none;
+}
+
+/*
+ * The tick: two across, six tall, at the middle of the column, above and below
+ * every rail.
+ *
+ * It is how the screen says where the choosing happens. Without them the middle
+ * is a convention you have to be told about; with them it is a place you can
+ * see, and the thing under them is the thing that is chosen.
+ */
+.calendar .tick {
+  /* Centred on its own rather than by the column, which would stop the rails
+     stretching to it — and a rail that has shrunk to its content is a rail that
+     scrolls to the wrong day. */
+  align-self: center;
+  flex: none;
+  width: 2px;
+  height: 6px;
+  border-radius: 33px;
+  background: var(--black);
 }
 
 /*
@@ -229,8 +255,10 @@ body.starting .screen {
   border-radius: 33px;
 }
 
+/* The distances are cut like the months — three across the column, at the same
+   width, with their rules landing on the same lines. Which is what makes the
+   row scroll: there are more than three of them. */
 .distance {
-  --cell: var(--distance-cell);
   align-items: center;
 }
 
@@ -281,8 +309,7 @@ body.starting .screen {
 /* ------------------------------------------------------------- the cards --- */
 
 .cards {
-  /* 36 under the calendar, and 33 above the tabs — the file has the tab bar at
-     805 with the column ending at 772. */
+  /* 36 under the calendar, and 36 above the tabs. */
   margin-top: 36px;
   position: relative;
   flex: 1 1 auto;
@@ -330,7 +357,7 @@ body.starting .screen {
 /* -------------------------------------------------------------- the tabs --- */
 
 .tabs {
-  margin-top: 33px;
+  margin-top: 36px;
   display: flex;
   align-items: stretch;
   gap: 12px;

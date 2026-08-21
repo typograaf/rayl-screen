@@ -72,6 +72,20 @@ the month in the middle of the months, the card in the middle of the picture.
 Which is why every rail has half a cell of air at each end, so the first and the
 last of anything can reach the middle like the rest.
 
+## The ticks
+
+Four of them, two points across and six tall, at the middle of the column,
+above and below every rail — node 893:7501. They are how the screen says where
+the choosing happens. Without them the middle is a convention somebody has to be
+told about; with them it is a place you can see, and the thing under them is the
+thing that is chosen.
+
+Everything in the calendar is six apart, the three rails included, and the
+distances are cut like the months: three across the column at the same width,
+their rules landing on the same lines. Which is what makes that row scroll —
+there are more than three of them, and what is past the edge is reached the same
+way a month is.
+
 ## The days and the months
 
 One flat run of days across several months, because that is what scrolling one
@@ -85,10 +99,36 @@ days correct themselves to the same date in the month you asked for — and to i
 last day if it does not have one, since the 31st of a thirty-day month is not a
 reason to jump to the first.
 
-Neither pushes back on the other. The days move the months only when the month
-is not already the one the chosen day is in, and the months move the days only
-when the day is not already in the month, so the two settle instead of chasing
-each other round.
+Neither pushes back on the other, and the way that is arranged took two goes.
+
+The two things a rail does when it settles are told apart: what it is _for_
+happens however it got there — a day chosen is a day chosen — and what it _says
+to the other rail_ only happens when the other rail is not where it came from.
+Suppressing the whole of it instead, which was the first try, meant a month
+scrolled to moved the days and then never told anybody, so the rota stayed on
+yesterday.
+
+And a month arrives in one move rather than walking. Scrolled to smoothly, the
+days went one at a time from here to there — every one of them a day chosen, a
+rota built, a tick rung, and the months dragged back by each — which is what
+"it bugs on" was. The suite crosses a month and fails if more than a day or two
+gets laid out.
+
+## The wheel opens out at the ends
+
+At rest the chosen card is the first one, so centring it leaves the top half of
+the frame empty — which reads as a list that has lost something rather than a
+list at its start.
+
+So the wheel is not always the same wheel. At either end of a list it is nearly
+a straight line, leaning far enough up or down that the card at that end sits
+against the edge of the frame and the rest run away from it, filling the space.
+A card's worth of scrolling in, it has curled back to its own radius with the
+chosen one in the middle. Two numbers move — the radius and how far the whole
+wheel is slid up the frame — and both are eased over that first card.
+
+The card under the ticks is the chosen one either way. What changes is where the
+ticks are looking.
 
 ## The tick
 

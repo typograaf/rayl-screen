@@ -149,8 +149,8 @@ check(
   `the mark starts at ${(await box(".mark")).x.toFixed(1)}`,
 );
 check(
-  "and the mark sits 65 down",
-  near((await box(".mark")).y, 65),
+  "and the mark sits 24 under the status bar",
+  near((await box(".mark")).y, 24),
   `${(await box(".mark")).y.toFixed(1)}`,
 );
 check(
@@ -182,9 +182,42 @@ check(
 
 const tabs = await box("nav.tabs");
 check(
-  "33 from the cards to the tabs",
-  near(tabs.y - (cards.y + cards.height), 33),
+  "36 from the cards to the tabs",
+  near(tabs.y - (cards.y + cards.height), 36),
   `${(tabs.y - cards.y - cards.height).toFixed(1)}`,
+);
+
+/*
+ * The ticks: four of them, two across and six tall, at the middle of the
+ * column, above and below every rail. They are how the screen says where the
+ * choosing happens, and without them the middle is a convention you have to be
+ * told about rather than a place you can see.
+ */
+const ticks = await page.evaluate(() => {
+  const column = document.querySelector(".calendar").getBoundingClientRect();
+  return [...document.querySelectorAll(".calendar .tick")].map((t) => {
+    const r = t.getBoundingClientRect();
+    return {
+      width: +r.width.toFixed(1),
+      height: +r.height.toFixed(1),
+      off: +(r.x + r.width / 2 - (column.x + column.width / 2)).toFixed(1),
+    };
+  });
+});
+check(
+  "a tick above and below every rail",
+  ticks.length === 4,
+  `${ticks.length}`,
+);
+check(
+  "two across, six tall, dead centre",
+  ticks.every((t) => near(t.width, 2) && near(t.height, 6) && near(t.off, 0)),
+  ticks.map((t) => `${t.width}x${t.height} at ${t.off}`).join("; "),
+);
+check(
+  "and the calendar comes to 178",
+  near((await box(".calendar")).height, 178, 2),
+  `${(await box(".calendar")).height.toFixed(1)}`,
 );
 
 /*
@@ -202,7 +235,7 @@ check(
   "the cells are equal shares of the column",
   near((await box(".months .cell")).width, share(4, 6, 3)) &&
     near((await box(".days .cell")).width, share(0, 6, 7)) &&
-    near((await box(".distance .cell")).width, share(5, 8, 4)),
+    near((await box(".distance .cell")).width, share(4, 6, 3)),
   `${(await box(".months .cell")).width.toFixed(2)}, ${(await box(".days .cell")).width.toFixed(2)}, ${(await box(".distance .cell")).width.toFixed(2)} of a ${column.toFixed(0)} column`,
 );
 
@@ -234,11 +267,20 @@ const ruleRun = (selector) =>
 
 const distanceRules = await ruleRun(".distance");
 check(
-  "the distances sit flush in the column",
-  distanceRules.length === 5 &&
+  "the distances land on the months' own lines",
+  distanceRules.length === 4 &&
     near(distanceRules[0], 0, 1) &&
-    near(distanceRules[4], column - 2, 1.5),
+    near(distanceRules[3], column - 2, 1.5),
   `${distanceRules.map((x) => x.toFixed(0)).join(", ")} across ${column.toFixed(0)}`,
+);
+
+check(
+  "and that row scrolls, because there are more than three",
+  await page.evaluate(() => {
+    const rail = document.getElementById("distance");
+    return rail.scrollWidth > rail.clientWidth + 1;
+  }),
+  "it fits, so there is nowhere to scroll to",
 );
 
 const monthRules = await ruleRun(".months");
@@ -432,6 +474,68 @@ check(
   "and a frame is inside the budget",
   flick.median < 20,
   `${flick.median.toFixed(1)}ms median, ${flick.calls} draw calls`,
+);
+
+/*
+ * A month arrives in one move.
+ *
+ * It used to walk: a smooth scroll of the days, one day at a time from here to
+ * there, every one of them a day chosen, a rota built and a tick rung — which
+ * is what "it bugs on" was. The days are put where they belong now, so a month
+ * away is one day laid out and not thirty.
+ */
+const before = await page.evaluate(() => window.rayl.built);
+await roll("#months", 102);
+await wait(1200);
+const after = await page.evaluate(() => window.rayl.built);
+check(
+  "a month away is one day laid out, not thirty",
+  after - before <= 2,
+  `${after - before} days built crossing a month`,
+);
+
+/*
+ * And the wheel opens out at the ends of a list.
+ *
+ * At rest the chosen card is the first one, so centring it leaves the top half
+ * of the frame empty — which reads as a list that has lost something rather
+ * than a list at its start. Flat and leaning, the first card sits at the top
+ * and the rest run down the frame; a card in and it has curled back to its own
+ * radius with the chosen one in the middle.
+ */
+const opening = await page.evaluate(() => {
+  const reel = document.getElementById("reel");
+  reel.scrollTop = 0;
+  window.rayl.draw?.();
+  return null;
+});
+await wait(500);
+const atRest = await page.evaluate(() => ({
+  curl: window.rayl.curl(),
+  first: window.rayl.wheel.cards[0].position.y,
+  second: window.rayl.wheel.cards[1].position.y,
+}));
+check(
+  "at rest the wheel is flat and the first card is at the top",
+  atRest.curl < 0.05 && atRest.first > 0.2 && atRest.second < atRest.first,
+  `curl ${atRest.curl.toFixed(2)}, first card at y ${atRest.first.toFixed(2)}`,
+);
+
+await page.evaluate(() => {
+  const reel = document.getElementById("reel");
+  reel.scrollTop = reel.children[0].getBoundingClientRect().height * 2;
+});
+await wait(600);
+const inside = await page.evaluate(() => ({
+  curl: window.rayl.curl(),
+  chosen: Math.abs(
+    window.rayl.wheel.cards[Math.round(window.rayl.at)].position.y,
+  ),
+}));
+check(
+  "and inside the list it has curled, with the chosen card in the middle",
+  inside.curl > 0.9 && inside.chosen < 0.02,
+  `curl ${inside.curl.toFixed(2)}, chosen card at y ${inside.chosen.toFixed(3)}`,
 );
 
 /* ----------------------------------------------------------- the haptics --- */
